@@ -4,6 +4,12 @@ PROMPT='$ '
 eval "$(/opt/homebrew/bin/brew shellenv)"
 source ~/.nvm/nvm.sh
 
+ZVM_INIT_MODE=sourcing
+ZVM_LINE_INIT_MODE=$ZVM_MODE_INSERT
+ZVM_INSERT_MODE_CURSOR=$ZVM_CURSOR_BLINKING_BEAM
+ZVM_NORMAL_MODE_CURSOR=$ZVM_CURSOR_BLINKING_BLOCK
+ZVM_VISUAL_MODE_CURSOR=$ZVM_CURSOR_BLINKING_BLOCK
+
 source $(brew --prefix)/opt/zsh-vi-mode/share/zsh-vi-mode/zsh-vi-mode.plugin.zsh
 
 # ASCII art from https://emojicombos.com/eye-ascii-art
