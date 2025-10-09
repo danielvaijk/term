@@ -1,7 +1,7 @@
 PROMPT='$ '
 
 # For executable paths in $PATH
-eval "$(/opt/homebrew/bin/brew shellenv)"
+source <(/opt/homebrew/bin/brew shellenv)
 source ~/.nvm/nvm.sh
 
 ZVM_INIT_MODE=sourcing
