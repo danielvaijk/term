@@ -4,6 +4,8 @@ PROMPT='$ '
 eval "$(/opt/homebrew/bin/brew shellenv)"
 source ~/.nvm/nvm.sh
 
+source $(brew --prefix)/opt/zsh-vi-mode/share/zsh-vi-mode/zsh-vi-mode.plugin.zsh
+
 # ASCII art from https://emojicombos.com/eye-ascii-art
 cat << "EOF"
 
