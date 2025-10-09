@@ -1,5 +1,9 @@
 PROMPT='$ '
 
+# For executable paths in $PATH
+eval "$(/opt/homebrew/bin/brew shellenv)"
+source ~/.nvm/nvm.sh
+
 # ASCII art from https://emojicombos.com/eye-ascii-art
 cat << "EOF"
 
