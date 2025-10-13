@@ -2,6 +2,8 @@
 
 SCRIPT_DIR="${0:A:h}"
 
+brew bundle
+
 mkdir ~/.config/ghostty
 
 ln -sf "$SCRIPT_DIR/.zshrc" ~/.zshrc
