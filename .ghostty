@@ -2,6 +2,4 @@ shell-integration = zsh
 background-image = ~/.config/ghostty/bg.jpg
 background-image-fit = cover
 background-image-opacity = 0.1
-theme = Hybrid
-#theme = Framer
-#theme = Afterglow
+theme = Framer
