@@ -1,2 +1,5 @@
 cask "ghostty"
 brew "zsh-vi-mode"
+brew "zsh-syntax-highlighting"
+brew "zsh-history-substring-search"
+brew "zsh-autosuggestions"

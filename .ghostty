@@ -3,3 +3,6 @@ background-image = ~/.config/ghostty/bg.jpg
 background-image-fit = cover
 background-image-opacity = 0.1
 theme = Framer
+
+keybind = up=text:\x1b[A
+keybind = down=text:\x1b[B
