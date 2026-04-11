@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Full-screen animated noise splash with floating highlight blobs.
+"""Full-screen animated noise splash driven by pre-extracted video frames.
 
-The terminal fills with random characters in dim gray. Several invisible
-"light" blobs drift around, pulsing in size. Characters near a blob are
-bright and shuffle rapidly (morphing); characters far away are dim and
-nearly static. Press any key to dismiss.
+The terminal fills with random characters in dim gray. Each animation
+frame supplies a brightness map (from frames.gz) that determines which
+characters are bright and morph rapidly. The video loops until a key
+is pressed.
 """
 
 import os
 import sys
-import math
+import gzip
+import json
 import random
 import select
 import termios
@@ -20,7 +21,6 @@ import signal
 
 CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz@#$%&*+=-~.:;|/\\<>'
 
-# 256-color grayscale stops
 C_DIM = 236
 C_LO  = 240
 C_MID = 245
@@ -44,117 +44,87 @@ def term_size():
         return 80, 24
 
 
-class Blob:
-    """Floating highlight source with pulsing radius."""
+def load_frames(path):
+    """Load compressed frame data. Returns (header_dict, list_of_frames).
 
-    __slots__ = ('x', 'y', 'base_r', 'r', 'vx', 'vy',
-                 'phase', 'pspeed', 'pamp')
+    Each frame is a flat bytes object of length cols*rows (0-255 grayscale).
+    """
+    with gzip.open(path, 'rb') as f:
+        header = json.loads(f.readline())
+        raw = f.read()
 
-    def __init__(self, w, h):
-        self.x = random.uniform(0, w)
-        self.y = random.uniform(0, h)
-        self.base_r = random.uniform(8, 18)
-        self.r = self.base_r
-        self.vx = random.uniform(-0.7, 0.7) or 0.3
-        self.vy = random.uniform(-0.35, 0.35) or 0.15
-        self.phase = random.uniform(0, math.tau)
-        self.pspeed = random.uniform(0.04, 0.09)
-        self.pamp = random.uniform(0.2, 0.35)
+    cols = header['cols']
+    rows = header['rows']
+    n = header['n_frames']
+    size = cols * rows
 
-    def tick(self, w, h):
-        self.x += self.vx
-        self.y += self.vy
-
-        if self.x <= 0 or self.x >= w - 1:
-            self.vx = -self.vx
-            self.x = max(0.0, min(float(w - 1), self.x))
-        if self.y <= 0 or self.y >= h - 1:
-            self.vy = -self.vy
-            self.y = max(0.0, min(float(h - 1), self.y))
-
-        # Organic drift
-        if random.random() < 0.025:
-            self.vx += random.uniform(-0.15, 0.15)
-            self.vy += random.uniform(-0.08, 0.08)
-            spd = math.hypot(self.vx, self.vy)
-            if spd > 1.2:
-                self.vx *= 1.2 / spd
-                self.vy *= 1.2 / spd
-            if spd < 0.12:
-                self.vx *= 2
-                self.vy *= 2
-
-        self.phase += self.pspeed
-        self.r = self.base_r * (1.0 + self.pamp * math.sin(self.phase))
+    frames = [raw[i * size:(i + 1) * size] for i in range(n)]
+    return header, frames
 
 
 class Splash:
-    def __init__(self):
+    def __init__(self, header, frames):
+        self.src_frames = frames
+        self.src_cols = header['cols']
+        self.src_rows = header['rows']
+        self.src_fps = header.get('fps', 18)
+        self.n_frames = len(frames)
         self._init_grid()
-        self.frame = 0
+        self.frame_idx = 0
+        self.tick_count = 0
 
     def _init_grid(self):
         self.cols, self.rows = term_size()
         self.gh = max(1, self.rows - 2)
         self.gw = self.cols
-        ch = CHARS
-        self.grid = [[random.choice(ch) for _ in range(self.gw)]
+        self.grid = [[random.choice(CHARS) for _ in range(self.gw)]
                       for _ in range(self.gh)]
-        n = max(3, min(7, (self.gw * self.gh) // 1500))
-        self.blobs = [Blob(self.gw, self.gh) for _ in range(n)]
         self._clear = True
 
     def handle_resize(self):
         self._init_grid()
 
     def tick(self):
-        self.frame += 1
-        for b in self.blobs:
-            b.tick(self.gw, self.gh)
+        self.tick_count += 1
+        self.frame_idx = self.tick_count % self.n_frames
+
+    def _build_brightness(self):
+        """Map current video frame onto the terminal grid as brightness."""
+        gh, gw = self.gh, self.gw
+        bright = [[0.0] * gw for _ in range(gh)]
+
+        src = self.src_frames[self.frame_idx]
+        sw, sh = self.src_cols, self.src_rows
+
+        # Map terminal (r, c) -> source pixel with nearest-neighbour scaling
+        for r in range(gh):
+            sy = r * sh // gh
+            row_off = sy * sw
+            brow = bright[r]
+            for c in range(gw):
+                sx = c * sw // gw
+                px = src[row_off + sx]    # 0-255
+                brow[c] = px / 255.0
+
+        return bright
 
     def render(self):
-        out = self._clear
-        if out:
+        do_clear = self._clear
+        if do_clear:
             self._clear = False
 
         gh, gw = self.gh, self.gw
         grid = self.grid
+        bright = self._build_brightness()
 
-        # ---- brightness map (sparse, blob-local) ----
-        bright = [[0.0] * gw for _ in range(gh)]
+        # Fade-in over first ~15 ticks
+        cap = min(1.0, self.tick_count / 15.0)
 
-        for blob in self.blobs:
-            bx, by, br = blob.x, blob.y, blob.r
-            r2 = br * br
-            ri = int(br) + 2
-            y0 = max(0, int(by) - ri)
-            y1 = min(gh, int(by) + ri + 1)
-            x0 = max(0, int(bx - br) - 2)
-            x1 = min(gw, int(bx + br) + 2)
-
-            for r in range(y0, y1):
-                dy = (r - by) * 2.0   # aspect-ratio correction
-                dy2 = dy * dy
-                if dy2 >= r2:
-                    continue
-                brow = bright[r]
-                for c in range(x0, x1):
-                    dx = c - bx
-                    d2 = dx * dx + dy2
-                    if d2 < r2:
-                        b = 1.0 - d2 / r2
-                        if b > brow[c]:
-                            brow[c] = b
-
-        # Fade-in over first ~15 frames
-        cap = min(1.0, self.frame / 15.0)
-
-        # ---- combined shuffle + render pass ----
         choice = random.choice
         rand = random.random
         chars = CHARS
 
-        buf_parts = ['\033[2J' if out else '', '\033[H']
+        buf = ['\033[2J' if do_clear else '', '\033[H']
 
         for r in range(gh):
             brow = bright[r]
@@ -175,7 +145,6 @@ class Splash:
                 elif rand() < 0.008:
                     grow[c] = choice(chars)
 
-                # Color from capped brightness
                 bc = min(b, cap)
                 if bc > 0.7:
                     g = C_MAX
@@ -193,14 +162,13 @@ class Splash:
                     prev = g
                 parts.append(grow[c])
 
-            buf_parts.append(''.join(parts))
+            buf.append(''.join(parts))
 
-        # Hint
         msg = 'press any key'
         mx = max(1, (self.cols - len(msg)) // 2)
-        buf_parts.append(f'\033[{self.rows};{mx}H\033[38;5;238m{msg}\033[0m')
+        buf.append(f'\033[{self.rows};{mx}H\033[38;5;238m{msg}\033[0m')
 
-        sys.stdout.write(''.join(buf_parts))
+        sys.stdout.write(''.join(buf))
         sys.stdout.flush()
 
 
@@ -212,7 +180,17 @@ def main():
     if cols < 20 or rows < 8:
         return
 
-    splash = Splash()
+    # Load frame data from alongside this script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    frames_path = os.path.join(script_dir, 'frames.gz')
+    if not os.path.exists(frames_path):
+        return
+
+    header, frames = load_frames(frames_path)
+    if not frames:
+        return
+
+    splash = Splash(header, frames)
 
     fd = sys.stdin.fileno()
     old = termios.tcgetattr(fd)
@@ -227,6 +205,9 @@ def main():
 
     signal.signal(signal.SIGWINCH, _on_winch)
 
+    # Frame timing from source fps
+    frame_time = 1.0 / header.get('fps', 18)
+
     try:
         tty.setcbreak(fd)
         global _resize
@@ -239,10 +220,8 @@ def main():
             splash.render()
             splash.tick()
 
-            if select.select([sys.stdin], [], [], 0.055)[0]:
+            if select.select([sys.stdin], [], [], frame_time)[0]:
                 data = os.read(fd, 4096)
-                # Only dismiss on real keypresses, not escape sequences
-                # (mouse scroll/click/movement, arrow keys, etc.)
                 if data and data[0:1] != b'\x1b':
                     return
 
