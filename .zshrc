@@ -23,7 +23,8 @@ function zvm_after_init() {
 }
 
 source $(brew --prefix)/opt/zsh-vi-mode/share/zsh-vi-mode/zsh-vi-mode.plugin.zsh
-source ~/.nvm/nvm.sh
+export NVM_DIR="$HOME/.nvm"
+source $(brew --prefix nvm)/nvm.sh
 
 # Animated eye splash screen
 source ~/home/term/splash.zsh
