@@ -1,4 +1,5 @@
 cask "ghostty"
+cask "secretive"
 brew "zsh-vi-mode"
 brew "zsh-syntax-highlighting"
 brew "zsh-history-substring-search"
