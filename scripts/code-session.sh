@@ -11,23 +11,16 @@ if [[ -z $HOST || -z $SESSION || -z $HOME_DIR ]]; then
   exit 1
 fi
 
-# Install SSH key on remote if this is the first connection.
-if ! ssh -o BatchMode=yes -o ConnectTimeout=5 $HOST true 2>/dev/null; then
-  ssh-copy-id $HOST
-fi
-
-# Create tmux session with a 2x2 pane layout on remote if it doesn't exist.
-ssh $HOST "
-  tmux has-session -t $SESSION 2>/dev/null && exit
-
-  tmux new-session -d -s $SESSION -c $HOME_DIR
-  tmux split-window -h -c $HOME_DIR
-  tmux select-pane -t 0
-  tmux split-window -v -c $HOME_DIR
-  tmux select-pane -t 2
-  tmux split-window -v -c $HOME_DIR
-  tmux select-pane -t 0
+TERM=xterm-256color ssh -t $HOST "
+  /opt/homebrew/bin/tmux has-session -t $SESSION 2>/dev/null || {
+    /opt/homebrew/bin/tmux new-session -d -s $SESSION -c $HOME_DIR
+    /opt/homebrew/bin/tmux split-window -h -c $HOME_DIR
+    /opt/homebrew/bin/tmux select-pane -t 0
+    /opt/homebrew/bin/tmux split-window -v -c $HOME_DIR
+    /opt/homebrew/bin/tmux select-pane -t 2
+    /opt/homebrew/bin/tmux split-window -v -c $HOME_DIR
+    /opt/homebrew/bin/tmux select-pane -t 0
+  }
+  caffeinate -i -w \$\$ &
+  /opt/homebrew/bin/tmux attach -t $SESSION
 "
-
-# Attach — caffeinate keeps the remote awake for the duration of the session.
-TERM=xterm-256color ssh -t $HOST "caffeinate -i -w \$\$ & tmux attach -t $SESSION"
