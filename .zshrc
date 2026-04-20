@@ -28,4 +28,9 @@ source $(brew --prefix nvm)/nvm.sh
 
 # Animated eye splash screen
 source ~/home/term/scripts/splash.zsh
+
+# Route SSH agent requests through Secretive for Touch ID-backed key signing.
+export SSH_AUTH_SOCK="$HOME/Library/Containers/com.maxgoedjen.Secretive.SecretAgent/Data/socket.ssh"
+
+# Local binaries take precedence over system-wide installs.
 export PATH="$HOME/.local/bin:$PATH"
