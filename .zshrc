@@ -27,5 +27,5 @@ export NVM_DIR="$HOME/.nvm"
 source $(brew --prefix nvm)/nvm.sh
 
 # Animated eye splash screen
-source ~/home/term/splash.zsh
+source ~/home/term/scripts/splash.zsh
 export PATH="$HOME/.local/bin:$PATH"
