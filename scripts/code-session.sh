@@ -15,11 +15,11 @@ TERM=xterm-256color ssh -t $HOST "
   /opt/homebrew/bin/tmux has-session -t $SESSION 2>/dev/null || {
     /opt/homebrew/bin/tmux new-session -d -s $SESSION -c $HOME_DIR
     /opt/homebrew/bin/tmux split-window -h -c $HOME_DIR
-    /opt/homebrew/bin/tmux select-pane -t 0
+    /opt/homebrew/bin/tmux select-pane -t 1
     /opt/homebrew/bin/tmux split-window -v -c $HOME_DIR
-    /opt/homebrew/bin/tmux select-pane -t 2
+    /opt/homebrew/bin/tmux select-pane -t 3
     /opt/homebrew/bin/tmux split-window -v -c $HOME_DIR
-    /opt/homebrew/bin/tmux select-pane -t 0
+    /opt/homebrew/bin/tmux select-pane -t 1
   }
   caffeinate -i -w \$\$ &
   /opt/homebrew/bin/tmux attach -t $SESSION
