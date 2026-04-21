@@ -180,9 +180,9 @@ def main():
     if cols < 20 or rows < 8:
         return
 
-    # Load frame data from alongside this script
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    frames_path = os.path.join(script_dir, 'frames.gz')
+    # Load frame data from the repo's data/ directory
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    frames_path = os.path.join(repo_root, 'data', 'frames.gz')
     if not os.path.exists(frames_path):
         return
 
