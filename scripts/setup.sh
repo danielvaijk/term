@@ -10,6 +10,7 @@ ln -sf "$SCRIPT_DIR/.zshrc" ~/.zshrc
 ln -sf "$SCRIPT_DIR/.ghostty" ~/.config/ghostty/config
 ln -sf "$SCRIPT_DIR/data/bg.jpg" ~/.config/ghostty/bg.jpg
 ln -sf "$SCRIPT_DIR/.tmux.conf" ~/.tmux.conf
+mkdir -p ~/.config/lazygit && ln -sf "$SCRIPT_DIR/.config/lazygit/config.yml" ~/.config/lazygit/config.yml
 
 defaults write com.mitchellh.ghostty "ApplePressAndHoldEnabled" -bool false
 
