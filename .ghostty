@@ -6,3 +6,5 @@ theme = Framer
 
 keybind = up=text:\x1b[A
 keybind = down=text:\x1b[B
+keybind = shift+enter=text:\x1b[13;2u
+
