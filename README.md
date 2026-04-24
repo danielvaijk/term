@@ -17,22 +17,25 @@ macOS terminal environment — Ghostty, tmux, zsh.
 Start a tmux session with `scripts/session.sh`:
 
 ```
-session.sh [-l layout] [-s session] [-c cwd] [user@host]
+session.sh [-s session] [-c cwd] [-p dir ...] [user@host]
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `-l` | `1` | Layout: 1 = single, 2 = left/right, 3 = 2x1, 4 = 2x2 |
 | `-s` | `main` | Session name |
-| `-c` | `~` | Working directory |
+| `-c` | `~` | Base working directory |
+| `-p` | `.` | Pane directory (relative to `-c`). Repeat for more panes (max 4) |
 | `user@host` | (local) | If given, runs on remote host via SSH |
+
+The number of `-p` flags determines the layout: 1 = single, 2 = left/right,
+3 = top split + bottom full, 4 = 2x2. Each value sets the starting directory for that pane.
 
 Examples:
 
 ```zsh
-# Local session
+# Local single-pane session
 scripts/session.sh
 
-# Remote 2x2 layout
-scripts/session.sh -l 4 -s dev -c ~/projects user@host
+# Remote 2x2 with per-pane directories
+scripts/session.sh -c ~/home -p term -p infra -p notes -p . user@host
 ```
