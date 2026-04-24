@@ -12,13 +12,27 @@ macOS terminal environment — Ghostty, tmux, zsh.
    ssh-copy-id -o PreferredAuthentications=password <host>
    ```
 
-## Connecting to a remote machine
+## Session management
 
-Create a wrapper script in `~` that calls the generic session script with your machine's details:
+Start a tmux session with `scripts/session.sh`:
 
-```zsh
-#!/usr/bin/env zsh
-~/home/term/scripts/session.sh "<host>" "<session>" "<home_dir>"
+```
+session.sh [-l layout] [-s session] [-c cwd] [user@host]
 ```
 
-Use `code-session.sh` instead for a 2x2 tmux pane layout.
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-l` | `1` | Layout: 1 = single, 2 = left/right, 3 = 2x1, 4 = 2x2 |
+| `-s` | `main` | Session name |
+| `-c` | `~` | Working directory |
+| `user@host` | (local) | If given, runs on remote host via SSH |
+
+Examples:
+
+```zsh
+# Local session
+scripts/session.sh
+
+# Remote 2x2 layout
+scripts/session.sh -l 4 -s dev -c ~/projects user@host
+```
