@@ -46,7 +46,6 @@ resolve() {
 }
 
 if [[ -n $HOST ]]; then
-  TMUX_CONF=$(base64 < ~/.tmux.conf)
   LAYOUT_CMDS=""
 
   local T=/opt/homebrew/bin/tmux
@@ -75,13 +74,20 @@ if [[ -n $HOST ]]; then
   esac
 
   local p1=$(resolve $CWD $PANES[1])
+  local ORIGIN=$(git -C "${0:A:h:h}" remote get-url origin 2>/dev/null)
   TERM=xterm-256color ssh -t $HOST "
-  echo '$TMUX_CONF' | base64 -D > ~/.tmux.conf && /opt/homebrew/bin/tmux source-file ~/.tmux.conf 2>/dev/null; true
-  /opt/homebrew/bin/tmux has-session -t $SESSION 2>/dev/null || {
-    /opt/homebrew/bin/tmux new-session -d -s $SESSION -c $p1$LAYOUT_CMDS
+  if [ -L ~/.tmux.conf ] && [ -n \"$ORIGIN\" ]; then
+    repo=\$(git -C \"\$(dirname \"\$(readlink ~/.tmux.conf)\")\" rev-parse --show-toplevel 2>/dev/null)
+    if [ -n \"\$repo\" ] && [ \"\$(git -C \"\$repo\" remote get-url origin 2>/dev/null)\" = \"$ORIGIN\" ]; then
+      git -C \"\$repo\" pull --ff-only
+      $T source-file ~/.tmux.conf 2>/dev/null || true
+    fi
+  fi
+  $T has-session -t $SESSION 2>/dev/null || {
+    $T new-session -d -s $SESSION -c $p1$LAYOUT_CMDS
   }
   caffeinate -i -w \$\$ &
-  /opt/homebrew/bin/tmux attach -t $SESSION
+  $T attach -t $SESSION
 "
 else
   TMUX=tmux
