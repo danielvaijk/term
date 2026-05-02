@@ -12,6 +12,17 @@ macOS terminal environment — Ghostty, tmux, zsh.
    ssh-copy-id -o PreferredAuthentications=password <host>
    ```
 
+## Layout
+
+Configs live under `.config/<tool>/` in the repo, mirroring `~/.config/`.
+`scripts/setup.sh` symlinks each into place. Two paths can't follow XDG:
+
+- `~/.zshenv` — zsh's hardcoded bootstrap; symlinked to the repo. It sets
+  `XDG_CONFIG_HOME` and `ZDOTDIR` so the rest of zsh's config sits under
+  `~/.config/zsh/`.
+- `~/.ssh/config` — ssh has no XDG support. `setup.sh` keeps the local file
+  and prepends an `Include` of the repo's `.ssh/config`.
+
 ## Session management
 
 Start a tmux session with `scripts/session.sh`:

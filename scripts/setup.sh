@@ -4,13 +4,15 @@ SCRIPT_DIR="${0:A:h:h}"
 
 brew bundle
 
-mkdir -p ~/.config/ghostty
+mkdir -p ~/.config/zsh ~/.config/tmux ~/.config/ghostty ~/.config/lazygit
 
-ln -sf "$SCRIPT_DIR/.zshrc" ~/.zshrc
-ln -sf "$SCRIPT_DIR/.ghostty" ~/.config/ghostty/config
+# zsh's bootstrap file is hardcoded to ~/.zshenv; it sets ZDOTDIR so the rest lives under XDG.
+ln -sf "$SCRIPT_DIR/.config/zsh/.zshenv" ~/.zshenv
+ln -sf "$SCRIPT_DIR/.config/zsh/.zshrc" ~/.config/zsh/.zshrc
+ln -sf "$SCRIPT_DIR/.config/tmux/tmux.conf" ~/.config/tmux/tmux.conf
+ln -sf "$SCRIPT_DIR/.config/ghostty/config" ~/.config/ghostty/config
 ln -sf "$SCRIPT_DIR/data/bg.jpg" ~/.config/ghostty/bg.jpg
-ln -sf "$SCRIPT_DIR/.tmux.conf" ~/.tmux.conf
-mkdir -p "$HOME/Library/Application Support/lazygit" && ln -sf "$SCRIPT_DIR/.config/lazygit/config.yml" "$HOME/Library/Application Support/lazygit/config.yml"
+ln -sf "$SCRIPT_DIR/.config/lazygit/config.yml" ~/.config/lazygit/config.yml
 
 defaults write com.mitchellh.ghostty "ApplePressAndHoldEnabled" -bool false
 
