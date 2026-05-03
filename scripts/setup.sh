@@ -4,12 +4,13 @@ SCRIPT_DIR="${0:A:h:h}"
 
 brew bundle
 
-mkdir -p ~/.config/zsh ~/.config/tmux ~/.config/ghostty ~/.config/lazygit
+mkdir -p ~/.config/zsh ~/.config/zellij ~/.config/ghostty ~/.config/lazygit
 
 # zsh's bootstrap file is hardcoded to ~/.zshenv; it sets ZDOTDIR so the rest lives under XDG.
 ln -sf "$SCRIPT_DIR/.config/zsh/.zshenv" ~/.zshenv
 ln -sf "$SCRIPT_DIR/.config/zsh/.zshrc" ~/.config/zsh/.zshrc
-ln -sf "$SCRIPT_DIR/.config/tmux/tmux.conf" ~/.config/tmux/tmux.conf
+ln -sf "$SCRIPT_DIR/.config/zellij/config.kdl" ~/.config/zellij/config.kdl
+ln -sfn "$SCRIPT_DIR/.config/zellij/layouts" ~/.config/zellij/layouts
 ln -sf "$SCRIPT_DIR/.config/ghostty/config" ~/.config/ghostty/config
 ln -sf "$SCRIPT_DIR/data/bg.jpg" ~/.config/ghostty/bg.jpg
 ln -sf "$SCRIPT_DIR/.config/lazygit/config.yml" ~/.config/lazygit/config.yml

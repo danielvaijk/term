@@ -1,6 +1,6 @@
 # term
 
-macOS terminal environment — Ghostty, tmux, zsh.
+macOS terminal environment — Ghostty, zellij, zsh.
 
 ## Setup
 
@@ -25,21 +25,22 @@ Configs live under `.config/<tool>/` in the repo, mirroring `~/.config/`.
 
 ## Session management
 
-Start a tmux session with `scripts/session.sh`:
+Start a zellij session with `scripts/session.sh`:
 
 ```
-session.sh [-s session] [-c cwd] [-p dir ...] [user@host]
+session.sh [-s session] [-l layout] [-c cwd] [user@host]
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-s` | `main` | Session name |
-| `-c` | `~` | Base working directory |
-| `-p` | `.` | Pane directory (relative to `-c`). Repeat for more panes (max 4) |
+| `-l` | `single` | Layout: `single`, `split` (left/right), or `grid` (2x2) |
+| `-c` | `~` | Working directory all panes start in |
 | `user@host` | (local) | If given, runs on remote host via SSH |
 
-The number of `-p` flags determines the layout: 1 = single, 2 = left/right,
-3 = top split + bottom full, 4 = 2x2. Each value sets the starting directory for that pane.
+Layouts live in `.config/zellij/layouts/` as KDL files. The `-l` flag only
+takes effect when the session is first created; reattaching to an existing
+session preserves its current layout.
 
 Examples:
 
@@ -47,6 +48,41 @@ Examples:
 # Local single-pane session
 scripts/session.sh
 
-# Remote 2x2 with per-pane directories
-scripts/session.sh -c ~/home -p term -p infra -p notes -p . user@host
+# Remote 2x2 in ~/home
+scripts/session.sh -c ~/home -l grid user@host
 ```
+
+## Accessing a remote dev server
+
+When a dev server is running on `localhost:PORT` on the remote, forward the
+port over SSH rather than exposing it publicly via `tunnel.vandijk.sh`.
+
+**Ad-hoc, second connection:**
+
+```
+ssh -NL 3000:localhost:3000 user@host
+```
+
+`-N` runs no command, `-L` forwards the port. Hit `http://localhost:3000` on
+the client.
+
+**Persistent, in `~/.ssh/config`:**
+
+```
+Host host
+  LocalForward 3000 localhost:3000
+```
+
+**On the fly, from inside an existing SSH session (including zellij):**
+
+1. Press `Enter` (must be at the start of a line)
+2. Press `~` then `Shift+C` — you'll get an `ssh>` prompt from the local SSH client
+3. Type `-L 3000:localhost:3000` and `Enter`
+
+Remove a forward later with `-KL 3000:localhost:3000` via the same escape.
+Nested SSH eats one `~` per layer — use `~~C` to reach the outer hop. If `~C`
+does nothing, the leading `Enter` was probably missed, or `EscapeChar none` is
+set.
+
+Reserve `tunnel.vandijk.sh` for things that genuinely need a public URL —
+webhooks, preview sharing, mobile testing on cellular.

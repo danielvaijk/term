@@ -1,6 +1,6 @@
 # Terminal
 cask "ghostty"
-brew "tmux"
+brew "zellij"
 
 # Network
 cask "secretive"
