@@ -86,7 +86,6 @@ if [[ -n $HOST ]]; then
   $T has-session -t $SESSION 2>/dev/null || {
     $T new-session -d -s $SESSION -c $p1$LAYOUT_CMDS
   }
-  caffeinate -i -w \$\$ &
   $T attach -t $SESSION
 "
 else
