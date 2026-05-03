@@ -46,7 +46,7 @@ if [[ -n $HOST ]]; then
   if zellij list-sessions --short 2>/dev/null | grep -qx $SESSION; then
     exec zellij attach $SESSION
   else
-    exec zellij --layout ~/.config/zellij/layouts/$LAYOUT.kdl -s $SESSION
+    exec zellij -n ~/.config/zellij/layouts/$LAYOUT.kdl -s $SESSION
   fi
 "
 else
@@ -54,6 +54,6 @@ else
   if zellij list-sessions --short 2>/dev/null | grep -qx $SESSION; then
     exec zellij attach $SESSION
   else
-    exec zellij --layout ~/.config/zellij/layouts/$LAYOUT.kdl -s $SESSION
+    exec zellij -n ~/.config/zellij/layouts/$LAYOUT.kdl -s $SESSION
   fi
 fi
