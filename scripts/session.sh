@@ -36,6 +36,7 @@ esac
 if [[ -n $HOST ]]; then
   local ORIGIN=$(git -C "${0:A:h:h}" remote get-url origin 2>/dev/null)
   TERM=xterm-256color ssh -t $HOST "
+  export PATH=\"/opt/homebrew/bin:/home/linuxbrew/.linuxbrew/bin:\$HOME/.local/bin:\$HOME/.cargo/bin:\$PATH\"
   if [ -L ~/.config/zellij/config.kdl ] && [ -n \"$ORIGIN\" ]; then
     repo=\$(git -C \"\$(dirname \"\$(readlink ~/.config/zellij/config.kdl)\")\" rev-parse --show-toplevel 2>/dev/null)
     if [ -n \"\$repo\" ] && [ \"\$(git -C \"\$repo\" remote get-url origin 2>/dev/null)\" = \"$ORIGIN\" ]; then
