@@ -93,6 +93,7 @@ if [[ -n $HOST ]]; then
   cleanup_prewarm
 
   TERM=xterm-256color exec ssh -S "$CTL_SOCK" -t "$HOST" "
+  export PATH=\"/opt/homebrew/bin:/home/linuxbrew/.linuxbrew/bin:\$HOME/.local/bin:\$HOME/.cargo/bin:\$PATH\"
   cd $CWD
   if zellij list-sessions --short 2>/dev/null | grep -qx $SESSION; then
     exec zellij attach $SESSION
