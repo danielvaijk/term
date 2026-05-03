@@ -7,6 +7,7 @@ characters are bright and morph rapidly. The video loops until a key
 is pressed.
 """
 
+import argparse
 import os
 import sys
 import gzip
@@ -63,15 +64,26 @@ def load_frames(path):
 
 
 class Splash:
-    def __init__(self, header, frames):
+    def __init__(self, header, frames, status_file=None):
         self.src_frames = frames
         self.src_cols = header['cols']
         self.src_rows = header['rows']
         self.src_fps = header.get('fps', 18)
         self.n_frames = len(frames)
+        self.status_file = status_file
         self._init_grid()
         self.frame_idx = 0
         self.tick_count = 0
+
+    def _read_status(self):
+        if not self.status_file:
+            return 'press any key'
+        try:
+            with open(self.status_file, 'r') as f:
+                line = f.readline().strip()
+            return line or 'press any key'
+        except OSError:
+            return 'press any key'
 
     def _init_grid(self):
         self.cols, self.rows = term_size()
@@ -164,15 +176,23 @@ class Splash:
 
             buf.append(''.join(parts))
 
-        msg = 'press any key'
+        msg = self._read_status()
+        # Clear the status line before drawing so shorter messages overwrite cleanly.
         mx = max(1, (self.cols - len(msg)) // 2)
-        buf.append(f'\033[{self.rows};{mx}H\033[38;5;238m{msg}\033[0m')
+        buf.append(f'\033[{self.rows};1H\033[2K\033[{self.rows};{mx}H\033[38;5;238m{msg}\033[0m')
 
         sys.stdout.write(''.join(buf))
         sys.stdout.flush()
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--status-file',
+                        help='Path to a file whose first line is shown as the bottom status text. '
+                             'Re-read every frame; useful as a loader when work is happening in '
+                             'the background.')
+    args = parser.parse_args()
+
     if not (sys.stdin.isatty() and sys.stdout.isatty()):
         return
 
@@ -190,7 +210,7 @@ def main():
     if not frames:
         return
 
-    splash = Splash(header, frames)
+    splash = Splash(header, frames, status_file=args.status_file)
 
     fd = sys.stdin.fileno()
     old = termios.tcgetattr(fd)
