@@ -6,6 +6,10 @@ brew "zellij"
 cask "secretive"
 brew "cloudflared"
 
+# Secrets
+cask "1password"
+cask "1password-cli"
+
 # Shell
 brew "zsh-vi-mode"
 brew "zsh-syntax-highlighting"
