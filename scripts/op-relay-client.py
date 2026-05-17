@@ -30,6 +30,7 @@ from pathlib import Path
 SOCK_PATH = os.environ.get("OP_RELAY_SOCK", os.path.expanduser("~/.op-relay.sock"))
 TCP_PORT = int(os.environ.get("OP_RELAY_PORT", "12321"))
 SECRET_REF_RE = re.compile(r"op://[^\s'\"`$\\]+")
+QUOTED_SECRET_REF_RE = re.compile(r"(?<=['\"])op://.*?(?=['\"])")
 
 
 class RelayError(Exception):
@@ -116,6 +117,10 @@ def resolve_refs(value: str, account_args: list[str] | None = None) -> str:
     def replace(match: re.Match[str]) -> str:
         return read_secret(match.group(0), account_args)
 
+    if value.startswith("op://"):
+        return read_secret(value, account_args)
+
+    value = QUOTED_SECRET_REF_RE.sub(replace, value)
     return SECRET_REF_RE.sub(replace, value)
 
 
