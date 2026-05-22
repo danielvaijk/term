@@ -30,9 +30,12 @@ source $(brew --prefix nvm)/nvm.sh
 source ~/home/term/scripts/splash.zsh
 
 # Route SSH agent requests through Secretive for Touch ID-backed key signing.
-# Exception: inside an SSH session that forwarded an agent (ssh -A), keep the
-# forwarded socket so git uses the connecting client's keys, not this host's.
-if [[ -z $SSH_CONNECTION || ! -S ${SSH_AUTH_SOCK:-} ]]; then
+# Exception: inside an SSH session that forwarded an agent (ssh -A), use the
+# stable symlink that session.sh updates on each connection. This ensures
+# shells surviving a reconnect (zellij panes) pick up the fresh socket.
+if [[ -n $SSH_CONNECTION && -S ~/.ssh/forwarded-agent.sock ]]; then
+  export SSH_AUTH_SOCK="$HOME/.ssh/forwarded-agent.sock"
+elif [[ -z $SSH_CONNECTION || ! -S ${SSH_AUTH_SOCK:-} ]]; then
   export SSH_AUTH_SOCK="$HOME/Library/Containers/com.maxgoedjen.Secretive.SecretAgent/Data/socket.ssh"
 fi
 

@@ -204,6 +204,7 @@ if [[ -n $HOST ]]; then
   # with the client's keys, not the remote's.
   TERM=xterm-256color ssh -A -S "$CTL_SOCK" -t "$HOST" "
   export PATH=\"\$HOME/.local/bin:/opt/homebrew/bin:/home/linuxbrew/.linuxbrew/bin:\$HOME/.cargo/bin:\$PATH\"
+  mkdir -p ~/.ssh && ln -sf \"\$SSH_AUTH_SOCK\" ~/.ssh/forwarded-agent.sock
   cd $CWD
   if zellij list-sessions --short 2>/dev/null | grep -qx $SESSION; then
     exec zellij attach $SESSION
