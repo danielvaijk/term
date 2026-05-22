@@ -30,7 +30,11 @@ source $(brew --prefix nvm)/nvm.sh
 source ~/home/term/scripts/splash.zsh
 
 # Route SSH agent requests through Secretive for Touch ID-backed key signing.
-export SSH_AUTH_SOCK="$HOME/Library/Containers/com.maxgoedjen.Secretive.SecretAgent/Data/socket.ssh"
+# Exception: inside an SSH session that forwarded an agent (ssh -A), keep the
+# forwarded socket so git uses the connecting client's keys, not this host's.
+if [[ -z $SSH_CONNECTION || ! -S ${SSH_AUTH_SOCK:-} ]]; then
+  export SSH_AUTH_SOCK="$HOME/Library/Containers/com.maxgoedjen.Secretive.SecretAgent/Data/socket.ssh"
+fi
 
 # Local binaries take precedence over system-wide installs.
 export PATH="$HOME/.local/bin:$PATH"

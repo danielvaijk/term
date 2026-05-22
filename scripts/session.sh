@@ -196,7 +196,9 @@ if [[ -n $HOST ]]; then
 
   cleanup_prewarm
 
-  TERM=xterm-256color ssh -S "$CTL_SOCK" -t "$HOST" "
+  # -A forwards this client's SSH agent so git inside the session authenticates
+  # with the client's keys, not the remote's.
+  TERM=xterm-256color ssh -A -S "$CTL_SOCK" -t "$HOST" "
   export PATH=\"\$HOME/.local/bin:/opt/homebrew/bin:/home/linuxbrew/.linuxbrew/bin:\$HOME/.cargo/bin:\$PATH\"
   cd $CWD
   if zellij list-sessions --short 2>/dev/null | grep -qx $SESSION; then
