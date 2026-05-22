@@ -121,7 +121,9 @@ if [[ -n $HOST ]]; then
   }
   trap cleanup_all EXIT INT TERM
 
-  if ! ssh -fNM -S "$CTL_SOCK" -o ControlPersist=300 "$HOST" 2>"$SSH_ERR_FILE"; then
+  # -A on the master, not just the slaves: with connection multiplexing the
+  # master governs agent forwarding, and slave sessions inherit it from here.
+  if ! ssh -fNM -A -S "$CTL_SOCK" -o ControlPersist=300 "$HOST" 2>"$SSH_ERR_FILE"; then
     print_connect_error "$HOST" "$SSH_ERR_FILE"
     exit 1
   fi
