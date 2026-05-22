@@ -165,7 +165,9 @@ if [[ -n $HOST ]]; then
   # frame.
   (
     print -r -- "syncing config..." > "$STATUS_FILE"
-    ssh -S "$CTL_SOCK" "$HOST" "
+    # -A so the config-repo pull authenticates with the client's forwarded
+    # agent, keeping all git Touch ID prompts on the client.
+    ssh -A -S "$CTL_SOCK" "$HOST" "
       export PATH=\"\$HOME/.local/bin:/opt/homebrew/bin:/home/linuxbrew/.linuxbrew/bin:\$HOME/.cargo/bin:\$PATH\"
       if [ -L ~/.config/zellij/config.kdl ] && [ -n \"$ORIGIN\" ]; then
         repo=\$(git -C \"\$(dirname \"\$(readlink ~/.config/zellij/config.kdl)\")\" rev-parse --show-toplevel 2>/dev/null)
