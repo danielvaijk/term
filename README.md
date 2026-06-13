@@ -7,7 +7,15 @@ macOS terminal environment — Ghostty, zellij, zsh.
 1. Clone the repo to `~/home/term`
 2. Run `scripts/setup.sh`
 3. Open Secretive and create an SSH key for this machine
-4. For each remote host you want to connect to, install your public key (one-time):
+4. For each remote host you want to connect to, install your public key (one-time).
+   On the target Mac:
+   ```
+   scripts/session.sh --accept-key
+   ```
+   Then run the normal remote session command from the client Mac and approve
+   the displayed fingerprint on the target Mac.
+
+   Password-based fallback also works when enabled on the target:
    ```
    ssh-copy-id -o PreferredAuthentications=password <host>
    ```
@@ -28,7 +36,7 @@ Configs live under `.config/<tool>/` in the repo, mirroring `~/.config/`.
 Start a zellij session with `scripts/session.sh`:
 
 ```
-session.sh [-s session] [-l layout] [-c cwd] [user@host]
+session.sh [--accept-key] [-s session] [-l layout] [-c cwd] [user@host]
 ```
 
 | Flag | Default | Description |
@@ -36,6 +44,7 @@ session.sh [-s session] [-l layout] [-c cwd] [user@host]
 | `-s` | `main` | Session name |
 | `-l` | `single` | Layout: `single`, `split` (left/right), or `grid` (2x2) |
 | `-c` | `~` | Working directory all panes start in |
+| `--accept-key` | | Listen once for another machine's SSH public key and prompt before adding it |
 | `user@host` | (local) | If given, runs on remote host via SSH |
 
 Layouts live in `.config/zellij/layouts/` as KDL files. The `-l` flag only
