@@ -7,10 +7,10 @@
 #
 # Layouts (-l):
 #   single  one pane (default)
-#   coding  large left pane, two stacked panes on the right
+#   coding  stacked editor/commands pane on the left, git/agent panes on the right
 #
-# All panes start in -c. The layout flag only takes effect when the
-# session is first created; reattaching ignores it.
+# All panes start in -c. The coding layout requires -c. The layout flag only
+# takes effect when the session is first created; reattaching ignores it.
 #
 # If user@host is given, the session runs on that remote host via SSH.
 # A full-screen splash plays while a control-master connection is
@@ -19,6 +19,7 @@
 SESSION=main
 LAYOUT=single
 CWD="~"
+CWD_SET=0
 ACCEPT_KEY=0
 PAIR_PORT=12322
 
@@ -45,7 +46,7 @@ while getopts "s:l:c:" opt; do
   case $opt in
     s) SESSION=$OPTARG ;;
     l) LAYOUT=$OPTARG ;;
-    c) CWD=$OPTARG ;;
+    c) CWD=$OPTARG; CWD_SET=1 ;;
     *) echo "Usage: ${0:t} [--accept-key] [-s session] [-l single|coding] [-c cwd] [user@host]"; exit 1 ;;
   esac
 done
@@ -57,6 +58,12 @@ case $LAYOUT in
   single|coding) ;;
   *) echo "Unknown layout: $LAYOUT (expected single|coding)"; exit 1 ;;
 esac
+
+if [[ $LAYOUT == coding && $CWD_SET != 1 ]]; then
+  echo "Usage: ${0:t} -l coding -c cwd [-s session] [user@host]"
+  echo "error: the coding layout requires -c cwd"
+  exit 1
+fi
 
 SCRIPT_DIR=${0:A:h}
 SPLASH=$SCRIPT_DIR/splash.py

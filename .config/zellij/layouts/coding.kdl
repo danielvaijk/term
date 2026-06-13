@@ -1,9 +1,12 @@
 layout {
     tab split_direction="vertical" {
-        pane
+        pane stacked=true {
+            pane name="editor" command="nvim" expanded=true
+            pane name="commands"
+        }
         pane split_direction="horizontal" {
-            pane
-            pane
+            pane name="git" command="lazygit"
+            pane name="agent" command="codex"
         }
     }
 }

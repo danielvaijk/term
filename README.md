@@ -42,8 +42,8 @@ session.sh [--accept-key] [-s session] [-l layout] [-c cwd] [user@host]
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-s` | `main` | Session name |
-| `-l` | `single` | Layout: `single` or `coding` (large left pane, two stacked panes on the right) |
-| `-c` | `~` | Working directory all panes start in |
+| `-l` | `single` | Layout: `single` or `coding` (stacked editor/commands pane on the left, git/agent panes on the right) |
+| `-c` | `~` | Working directory all panes start in; required with `-l coding` |
 | `--accept-key` | | Listen once for another machine's SSH public key and prompt before adding it |
 | `user@host` | (local) | If given, runs on remote host via SSH |
 
