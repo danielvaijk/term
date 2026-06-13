@@ -42,7 +42,7 @@ session.sh [--accept-key] [-s session] [-l layout] [-c cwd] [user@host]
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-s` | `main` | Session name |
-| `-l` | `single` | Layout: `single`, `split` (left/right), or `grid` (2x2) |
+| `-l` | `single` | Layout: `single` or `coding` (large left pane, two stacked panes on the right) |
 | `-c` | `~` | Working directory all panes start in |
 | `--accept-key` | | Listen once for another machine's SSH public key and prompt before adding it |
 | `user@host` | (local) | If given, runs on remote host via SSH |
@@ -57,8 +57,8 @@ Examples:
 # Local single-pane session
 scripts/session.sh
 
-# Remote 2x2 in ~/home
-scripts/session.sh -c ~/home -l grid user@host
+# Remote coding layout in ~/home
+scripts/session.sh -c ~/home -l coding user@host
 ```
 
 ## Accessing a remote dev server

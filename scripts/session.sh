@@ -7,8 +7,7 @@
 #
 # Layouts (-l):
 #   single  one pane (default)
-#   split   left/right two panes
-#   grid    2x2 four panes
+#   coding  large left pane, two stacked panes on the right
 #
 # All panes start in -c. The layout flag only takes effect when the
 # session is first created; reattaching ignores it.
@@ -47,7 +46,7 @@ while getopts "s:l:c:" opt; do
     s) SESSION=$OPTARG ;;
     l) LAYOUT=$OPTARG ;;
     c) CWD=$OPTARG ;;
-    *) echo "Usage: ${0:t} [--accept-key] [-s session] [-l single|split|grid] [-c cwd] [user@host]"; exit 1 ;;
+    *) echo "Usage: ${0:t} [--accept-key] [-s session] [-l single|coding] [-c cwd] [user@host]"; exit 1 ;;
   esac
 done
 shift $((OPTIND - 1))
@@ -55,8 +54,8 @@ shift $((OPTIND - 1))
 HOST=$1
 
 case $LAYOUT in
-  single|split|grid) ;;
-  *) echo "Unknown layout: $LAYOUT (expected single|split|grid)"; exit 1 ;;
+  single|coding) ;;
+  *) echo "Unknown layout: $LAYOUT (expected single|coding)"; exit 1 ;;
 esac
 
 SCRIPT_DIR=${0:A:h}
