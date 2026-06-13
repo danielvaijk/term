@@ -24,10 +24,14 @@ function zvm_after_init() {
 
 source $(brew --prefix)/opt/zsh-vi-mode/share/zsh-vi-mode/zsh-vi-mode.plugin.zsh
 export NVM_DIR="$HOME/.nvm"
-source $(brew --prefix nvm)/nvm.sh
+NVM_SCRIPT="$(brew --prefix nvm 2>/dev/null)/nvm.sh"
+[[ -r $NVM_SCRIPT ]] && source "$NVM_SCRIPT"
+unset NVM_SCRIPT
 
 # Animated eye splash screen
-source ~/home/term/scripts/splash.zsh
+TERM_REPO="${${(%):-%x}:A:h:h:h}"
+[[ -r "$TERM_REPO/scripts/splash.zsh" ]] && source "$TERM_REPO/scripts/splash.zsh"
+unset TERM_REPO
 
 # Route SSH agent requests through Secretive for Touch ID-backed key signing.
 # Exception: inside an SSH session that forwarded an agent (ssh -A), use the
