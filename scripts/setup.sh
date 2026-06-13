@@ -19,6 +19,8 @@ defaults write com.mitchellh.ghostty "ApplePressAndHoldEnabled" -bool false
 
 # ssh
 mkdir -p ~/.ssh && chmod 700 ~/.ssh
+chmod 700 "$SCRIPT_DIR/.ssh"
+chmod 600 "$SCRIPT_DIR/.ssh/config"
 touch ~/.ssh/config && chmod 600 ~/.ssh/config
 
 if ! grep -qF "Include $SCRIPT_DIR/.ssh/config" ~/.ssh/config; then
