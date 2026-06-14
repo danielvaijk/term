@@ -16,4 +16,5 @@ brew "zsh-history-substring-search"
 brew "zsh-autosuggestions"
 
 # Tools
+brew "bun"
 brew "lazygit"

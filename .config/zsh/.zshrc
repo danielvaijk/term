@@ -30,12 +30,14 @@ unset NVM_SCRIPT
 
 # Animated eye splash screen
 TERM_REPO="${${(%):-%x}:A:h:h:h}"
-[[ -r "$TERM_REPO/scripts/splash.zsh" ]] && source "$TERM_REPO/scripts/splash.zsh"
+if [[ -o interactive && -t 0 && -z $ZELLIJ && -r "$TERM_REPO/package.json" ]]; then
+  (cd "$TERM_REPO" && bun run splash) 2>/dev/null || true
+fi
 unset TERM_REPO
 
 # Route SSH agent requests through Secretive for Touch ID-backed key signing.
 # Exception: inside an SSH session that forwarded an agent (ssh -A), use the
-# stable symlink that session.sh updates on each connection. This ensures
+# stable symlink that session.ts updates on each connection. This ensures
 # shells surviving a reconnect (zellij panes) pick up the fresh socket.
 if [[ -n $SSH_CONNECTION && -S ~/.ssh/forwarded-agent.sock ]]; then
   export SSH_AUTH_SOCK="$HOME/.ssh/forwarded-agent.sock"

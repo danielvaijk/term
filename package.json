@@ -1,0 +1,19 @@
+{
+  "name": "term",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "format": "prettier --write .",
+    "harden-sshd": "bun scripts/harden-sshd.ts",
+    "op-relay": "bun scripts/op-relay.ts",
+    "op-relay-client": "bun scripts/op-relay-client.ts",
+    "session": "bun scripts/session.ts",
+    "setup": "bun scripts/setup.ts",
+    "setup-sudo-touch-id": "bun scripts/setup-sudo-touch-id.ts",
+    "splash": "bun scripts/splash.ts",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "prettier": "^3.5.3"
+  }
+}

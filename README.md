@@ -4,52 +4,68 @@ macOS terminal environment — Ghostty, zellij, zsh.
 
 ## Setup
 
-1. Clone the repo to `~/home/term`
-2. Run `scripts/setup.sh`
-3. Open Secretive and create an SSH key for this machine
-4. For each remote host you want to connect to, install your public key (one-time).
+1. Install Homebrew if it is not already installed:
+
+   ```zsh
+   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+   ```
+
+2. Clone the repo to `~/home/term`
+3. Install the Brewfile dependencies before running any repo scripts:
+
+   ```zsh
+   cd ~/home/term
+   brew bundle
+   ```
+
+4. Run `bun run setup`
+5. Open Secretive and create an SSH key for this machine
+6. For each remote host you want to connect to, install your public key (one-time).
    On the target Mac:
+
    ```
-   scripts/session.sh --accept-key
+   bun run session --accept-key
    ```
+
    Then run the normal remote session command from the client Mac and approve
    the displayed fingerprint on the target Mac.
 
    Password-based fallback also works when enabled on the target:
+
    ```
    ssh-copy-id -o PreferredAuthentications=password <host>
    ```
 
-`setup.sh` also installs the managed `sshd` policy: public-key auth stays on,
+`bun run setup` also installs the managed `sshd` policy: public-key auth stays on,
 password and keyboard-interactive auth are disabled, and root login is disabled.
 On macOS it enables Touch ID for `sudo` through `/etc/pam.d/sudo_local`.
 
 ## Layout
 
 Configs live under `.config/<tool>/` in the repo, mirroring `~/.config/`.
-`scripts/setup.sh` symlinks each into place. Two paths can't follow XDG:
+`bun run setup` symlinks each into place. Two paths can't follow XDG:
 
 - `~/.zshenv` — zsh's hardcoded bootstrap; symlinked to the repo. It sets
   `XDG_CONFIG_HOME` and `ZDOTDIR` so the rest of zsh's config sits under
   `~/.config/zsh/`.
-- `~/.ssh/config` — ssh has no XDG support. `setup.sh` keeps the local file
+- `~/.ssh/config` — ssh has no XDG support. `bun run setup` keeps the local file
   and prepends an `Include` of the repo's `.ssh/config`.
 
 ## Session management
 
-Start a zellij session with `scripts/session.sh`:
+Start a zellij session with `bun run session`:
 
 ```
-session.sh [--accept-key] [-c cwd] [user@host]
+bun run session [--accept-key] [-c cwd] [user@host]
 ```
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `-c` | `~` | Working directory all panes start in. When set, the session name is the directory name and the coding layout is used |
-| `--accept-key` | | Listen once for another machine's SSH public key and prompt before adding it |
-| `user@host` | (local) | If given, runs on remote host via SSH |
+| Flag           | Default | Description                                                                                                          |
+| -------------- | ------- | -------------------------------------------------------------------------------------------------------------------- |
+| `-c`           | `~`     | Working directory all panes start in. When set, the session name is the directory name and the coding layout is used |
+| `--accept-key` |         | Listen once for another machine's SSH public key and prompt before adding it                                         |
+| `user@host`    | (local) | If given, runs on remote host via SSH                                                                                |
 
-Without `-c`, `session.sh` starts the `main` session in `~` with a single
+Without `-c`, `bun run session` starts the `main` session in `~` with a single
 full-screen pane. Layout selection only takes effect when the session is first
 created; reattaching to an existing session preserves its current layout.
 
@@ -57,10 +73,10 @@ Examples:
 
 ```zsh
 # Local single-pane session
-scripts/session.sh
+bun run session
 
 # Remote coding layout in ~/home
-scripts/session.sh -c ~/home user@host
+bun run session -c ~/home user@host
 ```
 
 ## Accessing a remote dev server
@@ -97,7 +113,7 @@ set.
 
 ## Remote access security
 
-`scripts/session.sh user@host` treats SSH as the device allowlist. Cloudflare
+`bun run session user@host` treats SSH as the device allowlist. Cloudflare
 Tunnel, when used, is only the transport path to the host; a client still needs
 an approved SSH identity before the remote zellij session starts.
 
@@ -117,12 +133,12 @@ Use one hardware-backed SSH identity per physical client device:
 1. Create or unlock the device's hardware-backed SSH identity.
 2. From the new client, run the normal remote session command:
    ```
-   scripts/session.sh user@host
+   bun run session user@host
    ```
 3. When authentication fails, the client offers its agent public keys.
 4. On the target host, run:
    ```
-   scripts/session.sh --accept-key
+   bun run session --accept-key
    ```
 5. Approve only the fingerprint for the physical device you are adding.
 
@@ -145,11 +161,11 @@ exposed.
 
 ### Managed remote SSH policy
 
-`scripts/setup.sh` installs this policy. To reapply or inspect only the SSH
+`bun run setup` installs this policy. To reapply or inspect only the SSH
 daemon hardening:
 
 ```
-scripts/harden-sshd.sh --install
+bun run harden-sshd --install
 ```
 
 The script installs an `sshd_config.d` snippet that keeps public-key auth on and
@@ -157,7 +173,7 @@ disables password, keyboard-interactive, and root login paths. Check the
 effective daemon settings with:
 
 ```
-scripts/harden-sshd.sh --check
+bun run harden-sshd --check
 ```
 
 The settings that matter are:
@@ -170,13 +186,13 @@ permitrootlogin no
 authenticationmethods publickey
 ```
 
-`session.sh` also passes public-key-only SSH options for its own connections, but
+`bun run session` also passes public-key-only SSH options for its own connections, but
 the daemon policy is what prevents a fresh unapproved machine from logging in by
 some other SSH client.
 
 Before closing your current admin session, test a second SSH session from an
 approved client. If the host rejects the config, restore the backup path printed
-by `harden-sshd.sh --install` and reload `sshd`.
+by `bun run harden-sshd --install` and reload `sshd`.
 
 ### Client SSH config
 
@@ -209,7 +225,7 @@ workflow needs it.
 
 ### Agent forwarding boundary
 
-`session.sh` forwards the client SSH agent so git commands inside the remote
+`bun run session` forwards the client SSH agent so git commands inside the remote
 session can authenticate with the client device, keeping Touch ID or hardware
 token confirmation local. While the session is active, remote processes that can
 reach the forwarded socket can ask the local agent to sign authentication
