@@ -22,6 +22,7 @@ macOS terminal environment — Ghostty, zellij, zsh.
 
 `setup.sh` also installs the managed `sshd` policy: public-key auth stays on,
 password and keyboard-interactive auth are disabled, and root login is disabled.
+On macOS it enables Touch ID for `sudo` through `/etc/pam.d/sudo_local`.
 
 ## Layout
 

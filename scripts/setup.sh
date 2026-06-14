@@ -27,4 +27,5 @@ if ! grep -qF "Include $SCRIPT_DIR/.ssh/config" ~/.ssh/config; then
   print "Include $SCRIPT_DIR/.ssh/config\n$(< ~/.ssh/config)" > ~/.ssh/config
 fi
 
+"$SCRIPT_DIR/scripts/setup-sudo-touch-id.sh"
 "$SCRIPT_DIR/scripts/harden-sshd.sh" --install
