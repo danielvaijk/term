@@ -203,8 +203,6 @@ def main() -> None:
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
 
-    print(f"op-relay listening on {SOCK_PATH} and tcp://127.0.0.1:{TCP_PORT}", flush=True)
-
     threading.Thread(target=accept_loop, args=(tcp_srv,), daemon=True).start()
     accept_loop(unix_srv)
 
