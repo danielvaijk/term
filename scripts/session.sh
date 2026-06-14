@@ -1,16 +1,14 @@
 #!/usr/bin/env zsh
 
-# Usage: session.sh [--accept-key] [-s session] [-l layout] [-c cwd] [user@host]
+# Usage: session.sh [--accept-key] [-c cwd] [user@host]
 #
 #   --accept-key  listen once for another machine's SSH public key and prompt
 #                 before adding it to ~/.ssh/authorized_keys
 #
-# Layouts (-l):
-#   single  one pane (default)
-#   coding  stacked editor/commands pane on the left, git/agent panes on the right
-#
-# All panes start in -c. The coding layout requires -c. The layout flag only
-# takes effect when the session is first created; reattaching ignores it.
+# Without -c, starts the main session in ~ with a single full-screen pane.
+# With -c, all panes start there, the session name is the directory name, and
+# the coding layout is used. Layout only takes effect when the session is first
+# created; reattaching preserves the current layout.
 #
 # If user@host is given, the session runs on that remote host via SSH.
 # A full-screen splash plays while a control-master connection is
@@ -42,27 +40,40 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-while getopts "s:l:c:" opt; do
+session_name_for_cwd() {
+  local expanded=${~1}
+  local name=${${expanded:A}:t}
+  [[ -n $name ]] && print -r -- "$name" || print -r -- "root"
+}
+
+remote_cd_command() {
+  case "$1" in
+    "~")
+      print -r -- 'cd "$HOME"'
+      ;;
+    "~/"*)
+      local suffix=${1#\~/}
+      print -r -- "cd \"\$HOME\"/${(qq)suffix}"
+      ;;
+    *)
+      print -r -- "cd ${(qq)1}"
+      ;;
+  esac
+}
+
+while getopts ":c:" opt; do
   case $opt in
-    s) SESSION=$OPTARG ;;
-    l) LAYOUT=$OPTARG ;;
     c) CWD=$OPTARG; CWD_SET=1 ;;
-    *) echo "Usage: ${0:t} [--accept-key] [-s session] [-l single|coding] [-c cwd] [user@host]"; exit 1 ;;
+    *) echo "Usage: ${0:t} [--accept-key] [-c cwd] [user@host]"; exit 1 ;;
   esac
 done
 shift $((OPTIND - 1))
 
 HOST=$1
 
-case $LAYOUT in
-  single|coding) ;;
-  *) echo "Unknown layout: $LAYOUT (expected single|coding)"; exit 1 ;;
-esac
-
-if [[ $LAYOUT == coding && $CWD_SET != 1 ]]; then
-  echo "Usage: ${0:t} -l coding -c cwd [-s session] [user@host]"
-  echo "error: the coding layout requires -c cwd"
-  exit 1
+if (( CWD_SET )); then
+  LAYOUT=coding
+  SESSION=$(session_name_for_cwd "$CWD")
 fi
 
 SCRIPT_DIR=${0:A:h}
@@ -305,6 +316,8 @@ if [[ -n $HOST ]]; then
   check_cloudflared "$HOST"
 
   local ORIGIN=$(git -C "${SCRIPT_DIR:h}" remote get-url origin 2>/dev/null)
+  local REMOTE_SESSION=${(qq)SESSION}
+  local REMOTE_CD=$(remote_cd_command "$CWD")
 
   # If the session already exists on the remote we just need to attach;
   # no prewarm work, so play a simple splash and reuse the same connection.
@@ -425,11 +438,11 @@ if [[ -n $HOST ]]; then
   TERM=xterm-256color ssh -A -S "$CTL_SOCK" -t "$HOST" "
   export PATH=\"\$HOME/.local/bin:/opt/homebrew/bin:/home/linuxbrew/.linuxbrew/bin:\$HOME/.cargo/bin:\$PATH\"
   mkdir -p ~/.ssh && ln -sf \"\$SSH_AUTH_SOCK\" ~/.ssh/forwarded-agent.sock
-  cd $CWD
-  if zellij list-sessions --short 2>/dev/null | grep -qx $SESSION; then
-    exec zellij attach $SESSION
+  $REMOTE_CD
+  if zellij list-sessions --short 2>/dev/null | grep -qx -- $REMOTE_SESSION; then
+    exec zellij attach $REMOTE_SESSION
   else
-    exec zellij -n ~/.config/zellij/layouts/$LAYOUT.kdl -s $SESSION
+    exec zellij -n \"\$HOME/.config/zellij/layouts/$LAYOUT.kdl\" -s $REMOTE_SESSION
   fi
 "
   SSH_STATUS=$?
@@ -438,10 +451,10 @@ if [[ -n $HOST ]]; then
   exit $SSH_STATUS
 else
   cd ${~CWD}
-  if zellij list-sessions --short 2>/dev/null | grep -qx $SESSION; then
-    exec zellij attach $SESSION
+  if zellij list-sessions --short 2>/dev/null | grep -qx -- "$SESSION"; then
+    exec zellij attach "$SESSION"
   else
     python3 "$SPLASH" 2>/dev/null
-    exec zellij -n ~/.config/zellij/layouts/$LAYOUT.kdl -s $SESSION
+    exec zellij -n "$HOME/.config/zellij/layouts/$LAYOUT.kdl" -s "$SESSION"
   fi
 fi
