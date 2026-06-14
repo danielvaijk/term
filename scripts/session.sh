@@ -265,56 +265,13 @@ if (( ACCEPT_KEY )); then
   exit 0
 fi
 
-uses_cloudflared_proxy() {
-  ssh -G "$1" 2>/dev/null | awk '
-    BEGIN { in_proxycommand = 0 }
-    tolower($1) == "proxycommand" {
-      in_proxycommand = 1
-      $1 = ""
-      print
-      next
-    }
-    in_proxycommand && /^[[:space:]]/ {
-      print
-      next
-    }
-    { in_proxycommand = 0 }
-  ' | grep -q 'cloudflared'
-}
-
-cloudflared_tunnel_error() {
-  grep -Eiq \
-    'cloudflared.*(tunnel|origin|service|connect)|tunnel.*(not.*found|not.*running|unavailable|connection refused|connection reset|failed)|origin.*(unavailable|error|connection refused|connection reset|not.*reachable)|1033|Unable to reach the origin|lookup .* no such host|connection closed by (remote host|UNKNOWN port 65535)|kex_exchange_identification' \
-    "$1"
-}
-
 print_connect_error() {
   local host=$1
-  local err_file=$2
 
-  if uses_cloudflared_proxy "$host" && cloudflared_tunnel_error "$err_file"; then
-    print -u2 "error: cloudflared tunnel is not reachable for $host"
-    print -u2 "hint: start it in another terminal with scripts/tunnel.sh <tunnel-name>"
-  else
-    print -u2 "error: failed to connect to $host"
-  fi
-}
-
-check_cloudflared() {
-  local host=$1
-
-  uses_cloudflared_proxy "$host" || return 0
-
-  if ! command -v cloudflared >/dev/null 2>&1; then
-    print -u2 "error: $host uses cloudflared, but cloudflared is not installed or not on PATH"
-    print -u2 "hint: install it with brew install cloudflared"
-    exit 1
-  fi
+  print -u2 "error: failed to connect to $host"
 }
 
 if [[ -n $HOST ]]; then
-  check_cloudflared "$HOST"
-
   local ORIGIN=$(git -C "${SCRIPT_DIR:h}" remote get-url origin 2>/dev/null)
   local REMOTE_SESSION=${(qq)SESSION}
   local REMOTE_CD=$(remote_cd_command "$CWD")

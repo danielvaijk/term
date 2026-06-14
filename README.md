@@ -62,7 +62,7 @@ scripts/session.sh -c ~/home user@host
 ## Accessing a remote dev server
 
 When a dev server is running on `localhost:PORT` on the remote, forward the
-port over SSH rather than exposing it publicly via `tunnel.vandijk.sh`.
+port over SSH rather than exposing it publicly.
 
 **Ad-hoc, second connection:**
 
@@ -90,6 +90,3 @@ Remove a forward later with `-KL 3000:localhost:3000` via the same escape.
 Nested SSH eats one `~` per layer — use `~~C` to reach the outer hop. If `~C`
 does nothing, the leading `Enter` was probably missed, or `EscapeChar none` is
 set.
-
-Reserve `tunnel.vandijk.sh` for things that genuinely need a public URL —
-webhooks, preview sharing, mobile testing on cellular.

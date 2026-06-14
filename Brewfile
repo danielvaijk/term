@@ -4,7 +4,6 @@ brew "zellij"
 
 # Network
 cask "secretive"
-brew "cloudflared"
 
 # Secrets
 cask "1password"
