@@ -1,24 +1,22 @@
 #!/usr/bin/env bun
 import { spawn, spawnSync } from "node:child_process";
+import { Command } from "commander";
+import { input, select } from "@inquirer/prompts";
 import {
   chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
+  realpathSync,
   rmSync,
-  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
-let session = "main";
-let layout = "single";
-let cwd = "~";
-let cwdSet = false;
-let acceptKey = false;
 const pairPort = 12322;
 const scriptDir = path.dirname(new URL(import.meta.url).pathname);
 const repoRoot = path.dirname(scriptDir);
@@ -42,48 +40,16 @@ function sessionNameForCwd(value: string) {
   return path.basename(resolved) || "root";
 }
 
+function sessionConfig(cwd: string, cwdSet: boolean) {
+  return cwdSet
+    ? { layout: "coding", session: sessionNameForCwd(cwd) }
+    : { layout: "single", session: "main" };
+}
+
 function remoteCdCommand(value: string) {
   if (value === "~") return 'cd "$HOME"';
   if (value.startsWith("~/")) return `cd "$HOME"/${shellQuote(value.slice(2))}`;
   return `cd ${shellQuote(value)}`;
-}
-
-function usage() {
-  process.stderr.write(
-    `Usage: ${path.basename(process.argv[1])} [--accept-key] [-c cwd] [user@host]\n`,
-  );
-}
-
-const args = process.argv.slice(2);
-let i = 0;
-while (i < args.length) {
-  const arg = args[i];
-  if (arg === "--accept-key") {
-    acceptKey = true;
-    i += 1;
-  } else if (arg === "--") {
-    i += 1;
-    break;
-  } else if (arg === "-c") {
-    if (i + 1 >= args.length) {
-      usage();
-      process.exit(1);
-    }
-    cwd = args[i + 1];
-    cwdSet = true;
-    i += 2;
-  } else if (arg.startsWith("-")) {
-    usage();
-    process.exit(1);
-  } else {
-    break;
-  }
-}
-const host = args[i];
-
-if (cwdSet) {
-  layout = "coding";
-  session = sessionNameForCwd(cwd);
 }
 
 function validPublicKeyLine(line: string) {
@@ -125,6 +91,26 @@ function listenOnce(port: number) {
     server.listen(port);
   });
 }
+
+type CliOptions = {
+  acceptKey?: boolean;
+  cwd?: string;
+};
+
+const program = new Command()
+  .name(path.basename(process.argv[1]))
+  .description("Start a local or remote zellij session")
+  .argument("[host]", "remote SSH host, optionally user@host")
+  .option("--accept-key", "listen once for another machine's SSH public key")
+  .option("-c, --cwd <cwd>", "working directory all panes start in")
+  .allowExcessArguments(false)
+  .parse(process.argv);
+
+const cli = program.opts<CliOptions>();
+const hostArg = program.args[0] as string | undefined;
+const acceptKey = Boolean(cli.acceptKey);
+const initialCwd = cli.cwd ?? "~";
+const initialCwdSet = program.getOptionValueSource("cwd") !== undefined;
 
 async function ask(question: string) {
   process.stdout.write(question);
@@ -226,6 +212,22 @@ function resolvedPairingHost(sshHost: string) {
   return match?.split(/\s+/, 2)[1] ?? "";
 }
 
+function resolvedKnownHostTarget(sshHost: string) {
+  const result = commandOutput("ssh", ["-G", sshHost]);
+  const config = new Map(
+    result.stdout
+      .split(/\r?\n/)
+      .map((line) => line.split(/\s+/, 2))
+      .filter((parts): parts is [string, string] => parts.length === 2),
+  );
+  const hostname =
+    config.get("hostname") || sshHost.split("@").pop() || sshHost;
+  const port = config.get("port") || "22";
+  const host = hostname.split(":")[0];
+
+  return port === "22" ? host : `[${host}]:${port}`;
+}
+
 function offerAgentKeysForPairing(sshHost: string) {
   const keys = commandOutput("ssh-add", ["-L"])
     .stdout.split(/\r?\n/)
@@ -287,6 +289,8 @@ function connectControlMaster(
       "-o",
       "BatchMode=yes",
       "-o",
+      "StrictHostKeyChecking=accept-new",
+      "-o",
       "PreferredAuthentications=publickey",
       "-o",
       "PasswordAuthentication=no",
@@ -322,8 +326,32 @@ async function waitForPairedAuth(
   return false;
 }
 
-function printConnectError(sshHost: string) {
+function printConnectError(sshHost: string, errFile?: string) {
   process.stderr.write(`error: failed to connect to ${sshHost}\n`);
+  if (!errFile) return;
+
+  const stderr = readFileSync(errFile, "utf8");
+  if (/host key verification failed|offending .*key in/i.test(stderr)) {
+    const target = resolvedKnownHostTarget(sshHost);
+    process.stderr.write(
+      [
+        "SSH rejected the target host key before authentication.",
+        "If this is the expected Mac, reset the stale known_hosts entry and retry:",
+        `ssh-keygen -R ${shellQuote(target)}`,
+      ].join("\n") + "\n",
+    );
+    return;
+  }
+
+  const detail = stderr
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(-4);
+
+  if (detail.length) {
+    process.stderr.write(`${detail.join("\n")}\n`);
+  }
 }
 
 function tempPath(prefix: string) {
@@ -346,12 +374,304 @@ function opRealPath() {
   return "";
 }
 
-if (acceptKey) {
-  await acceptKeyPairing();
-  process.exit(0);
+type NetworkDevice = {
+  host: string;
+  name: string;
+  detail: string;
+};
+
+type ArpDevice = {
+  ip: string;
+  rawName: string;
+  iface: string;
+};
+
+function reverseDnsName(ip: string) {
+  const host = commandOutput("dig", ["+short", "-x", ip])
+    .stdout.split(/\r?\n/, 1)[0]
+    ?.trim()
+    .replace(/\.$/, "");
+
+  if (host) return host;
+
+  const fallback = commandOutput("host", [ip]).stdout.match(
+    /domain name pointer (.+?)\.$/,
+  )?.[1];
+
+  return fallback ?? "";
 }
 
-if (host) {
+function canConnect(host: string, port: number, timeoutMs = 500) {
+  return new Promise<boolean>((resolve) => {
+    const socket = net.createConnection({ host, port });
+    let settled = false;
+
+    const settle = (open: boolean) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve(open);
+    };
+
+    socket.setTimeout(timeoutMs);
+    socket.once("connect", () => settle(true));
+    socket.once("timeout", () => settle(false));
+    socket.once("error", () => settle(false));
+  });
+}
+
+async function localNetworkDevices() {
+  const devices = new Map<string, ArpDevice>();
+  const result = commandOutput("arp", ["-a"]);
+
+  for (const line of result.stdout.split(/\r?\n/)) {
+    const match = line.match(
+      /^(.+?) \((\d+\.\d+\.\d+\.\d+)\) at (.+?) on (\S+)/,
+    );
+    if (!match) continue;
+
+    const [, rawName, ip, mac, iface] = match;
+    if (mac === "(incomplete)") continue;
+
+    devices.set(ip, {
+      ip,
+      rawName,
+      iface,
+    });
+  }
+
+  const openDevices = await Promise.all(
+    [...devices.values()].map(async (device) =>
+      (await canConnect(device.ip, 22)) ? device : undefined,
+    ),
+  );
+
+  return openDevices
+    .filter((device) => device !== undefined)
+    .map((device) => {
+      const dnsName = reverseDnsName(device.ip);
+      const name =
+        dnsName || (device.rawName === "?" ? device.ip : device.rawName);
+
+      return {
+        host: device.ip,
+        name,
+        detail:
+          name === device.ip ? device.iface : `${device.ip}, ${device.iface}`,
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+}
+
+function expandGlob(pattern: string) {
+  const dir = path.dirname(pattern);
+  const basename = path.basename(pattern);
+  if (!basename.includes("*")) return existsSync(pattern) ? [pattern] : [];
+
+  const expression = new RegExp(
+    `^${basename
+      .split("*")
+      .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      .join(".*")}$`,
+  );
+
+  try {
+    return readdirSync(dir)
+      .filter((entry) => expression.test(entry))
+      .map((entry) => path.join(dir, entry));
+  } catch {
+    return [];
+  }
+}
+
+function collectSshConfigHosts(file: string, seen = new Set<string>()) {
+  const hosts = new Set<string>();
+  let resolved: string;
+
+  try {
+    resolved = realpathSync(file);
+  } catch {
+    return hosts;
+  }
+
+  if (seen.has(resolved)) return hosts;
+  seen.add(resolved);
+
+  for (const line of readFileSync(resolved, "utf8").split(/\r?\n/)) {
+    const trimmed = line.replace(/#.*/, "").trim();
+    if (!trimmed) continue;
+
+    const include = trimmed.match(/^include\s+(.+)$/i);
+    if (include) {
+      for (const rawPattern of include[1].split(/\s+/)) {
+        const pattern = rawPattern.startsWith("~/")
+          ? path.join(os.homedir(), rawPattern.slice(2))
+          : path.resolve(path.dirname(resolved), rawPattern);
+
+        for (const included of expandGlob(pattern)) {
+          for (const host of collectSshConfigHosts(included, seen)) {
+            hosts.add(host);
+          }
+        }
+      }
+      continue;
+    }
+
+    const hostLine = trimmed.match(/^host\s+(.+)$/i);
+    if (!hostLine) continue;
+
+    for (const host of hostLine[1].split(/\s+/)) {
+      if (host && !host.includes("*") && !host.includes("?")) hosts.add(host);
+    }
+  }
+
+  return hosts;
+}
+
+function sshConfigHosts() {
+  const hosts = collectSshConfigHosts(path.join(os.homedir(), ".ssh/config"));
+
+  return [...hosts].sort((a, b) =>
+    a.localeCompare(b, undefined, { numeric: true }),
+  );
+}
+
+async function chooseHost(existingHost?: string) {
+  let selectedHost = existingHost;
+
+  if (!selectedHost) {
+    const devices = await localNetworkDevices();
+    const configHosts = sshConfigHosts();
+    const picked = await select<string>({
+      message: "Select a target",
+      choices: [
+        { name: "This Mac (local)", value: "__local__" },
+        ...devices.map((device) => ({
+          name: `${device.name} (${device.detail})`,
+          value: device.host,
+        })),
+        ...configHosts.map((host) => ({
+          name: `${host} (~/.ssh/config)`,
+          value: host,
+        })),
+        { name: "Enter host manually", value: "__manual__" },
+      ],
+    });
+
+    if (picked === "__local__") return undefined;
+
+    selectedHost =
+      picked === "__manual__"
+        ? await input({ message: "Host or IP address" })
+        : picked;
+  }
+
+  if (selectedHost.includes("@")) return selectedHost;
+
+  const username = await input({
+    message: "Username",
+    default: os.userInfo().username,
+  });
+
+  return `${username}@${selectedHost}`;
+}
+
+function sortDirectoryNames(a: string, b: string) {
+  const aLowercase = /^[a-z]/.test(a);
+  const bLowercase = /^[a-z]/.test(b);
+
+  if (aLowercase !== bLowercase) return aLowercase ? -1 : 1;
+  return a.localeCompare(b, undefined, { numeric: true });
+}
+
+function localHomeDirs() {
+  return readdirSync(os.homedir(), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .filter((name) => !name.startsWith("."))
+    .sort(sortDirectoryNames);
+}
+
+async function chooseLocalCwd() {
+  const picked = await select<string>({
+    message: "Start directory",
+    choices: [
+      { name: "Home (~), single layout", value: "__home__" },
+      ...localHomeDirs().map((dir) => ({
+        name: `${dir} (coding layout)`,
+        value: `~/${dir}`,
+      })),
+      { name: "Enter directory manually", value: "__manual__" },
+    ],
+  });
+
+  if (picked === "__home__") return { cwd: "~", cwdSet: false };
+  if (picked === "__manual__") {
+    const cwd = await input({
+      message: "Directory",
+      default: "~",
+    });
+    return { cwd, cwdSet: cwd !== "~" };
+  }
+
+  return { cwd: picked, cwdSet: true };
+}
+
+function remoteHomeDirs(ctlSock: string, sshHost: string) {
+  const result = spawnSync(
+    "ssh",
+    [
+      "-S",
+      ctlSock,
+      sshHost,
+      'find "$HOME" -mindepth 1 -maxdepth 1 -type d -exec basename {} \\; 2>/dev/null | sort',
+    ],
+    { encoding: "utf8" },
+  );
+
+  if (result.status !== 0) return [];
+
+  return result.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((name) => name && !name.startsWith("."))
+    .sort(sortDirectoryNames);
+}
+
+async function chooseRemoteCwd(ctlSock: string, sshHost: string) {
+  const dirs = remoteHomeDirs(ctlSock, sshHost);
+  const picked = await select<string>({
+    message: "Start directory",
+    choices: [
+      { name: "Home (~), single layout", value: "__home__" },
+      ...dirs.map((dir) => ({
+        name: `${dir} (coding layout)`,
+        value: `~/${dir}`,
+      })),
+      { name: "Enter directory manually", value: "__manual__" },
+    ],
+  });
+
+  if (picked === "__home__") return { cwd: "~", cwdSet: false };
+  if (picked === "__manual__") {
+    const cwd = await input({
+      message: "Remote directory",
+      default: "~",
+    });
+    return { cwd, cwdSet: cwd !== "~" };
+  }
+
+  return { cwd: picked, cwdSet: true };
+}
+
+async function runRemoteSession(
+  host: string,
+  requestedCwd: string,
+  requestedCwdSet: boolean,
+  promptCwd: boolean,
+) {
+  let cwd = requestedCwd;
+  let cwdSet = requestedCwdSet;
   const origin = commandOutput("git", [
     "-C",
     repoRoot,
@@ -359,8 +679,6 @@ if (host) {
     "get-url",
     "origin",
   ]).stdout.trim();
-  const remoteSession = shellQuote(session);
-  const remoteCd = remoteCdCommand(cwd);
   const statusFile = tempPath("zellij-splash.");
   const ctlSock = path.join(
     mkdtempSync(path.join(os.tmpdir(), "zellij-ctl.")),
@@ -398,14 +716,24 @@ if (host) {
   if (!connectControlMaster(ctlSock, host, sshErrFile.file)) {
     if (sshAuthFailure(sshErrFile.file) && offerAgentKeysForPairing(host)) {
       if (!(await waitForPairedAuth(ctlSock, host, sshErrFile.file))) {
-        printConnectError(host);
+        printConnectError(host, sshErrFile.file);
         process.exit(1);
       }
     } else {
-      printConnectError(host);
+      printConnectError(host, sshErrFile.file);
       process.exit(1);
     }
   }
+
+  if (promptCwd && !requestedCwdSet) {
+    const picked = await chooseRemoteCwd(ctlSock, host);
+    cwd = picked.cwd;
+    cwdSet = picked.cwdSet;
+  }
+
+  const { layout, session } = sessionConfig(cwd, cwdSet);
+  const remoteSession = shellQuote(session);
+  const remoteCd = remoteCdCommand(cwd);
 
   const opReal = opRealPath();
   if (!opReal) {
@@ -524,7 +852,10 @@ TERM_OP_WRAPPER
   process.removeAllListeners("exit");
   cleanupAll();
   process.exit(result.status ?? 1);
-} else {
+}
+
+function runLocalSession(cwd: string, cwdSet: boolean) {
+  const { layout, session } = sessionConfig(cwd, cwdSet);
   process.chdir(expandHome(cwd));
   const list = spawnSync("zellij", ["list-sessions", "--short"], {
     encoding: "utf8",
@@ -548,3 +879,38 @@ TERM_OP_WRAPPER
   );
   process.exit(result.status ?? 1);
 }
+
+function isPromptInterrupt(error: unknown) {
+  return (
+    error instanceof Error &&
+    (error.name === "ExitPromptError" ||
+      error.message.includes("User force closed the prompt"))
+  );
+}
+
+async function main() {
+  if (acceptKey) {
+    await acceptKeyPairing();
+    process.exit(0);
+  }
+
+  const host = await chooseHost(hostArg);
+
+  if (host) {
+    await runRemoteSession(host, initialCwd, initialCwdSet, !initialCwdSet);
+  } else {
+    const { cwd, cwdSet } = initialCwdSet
+      ? { cwd: initialCwd, cwdSet: initialCwdSet }
+      : await chooseLocalCwd();
+    runLocalSession(cwd, cwdSet);
+  }
+}
+
+await main().catch((error) => {
+  if (isPromptInterrupt(error)) {
+    process.stdout.write("\n");
+    process.exit(130);
+  }
+
+  throw error;
+});

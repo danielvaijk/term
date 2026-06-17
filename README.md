@@ -61,18 +61,22 @@ bun run session [--accept-key] [-c cwd] [user@host]
 
 | Flag           | Default | Description                                                                                                          |
 | -------------- | ------- | -------------------------------------------------------------------------------------------------------------------- |
-| `-c`           | `~`     | Working directory all panes start in. When set, the session name is the directory name and the coding layout is used |
+| `-c`, `--cwd`  | `~`     | Working directory all panes start in. When set, the session name is the directory name and the coding layout is used |
 | `--accept-key` |         | Listen once for another machine's SSH public key and prompt before adding it                                         |
-| `user@host`    | (local) | If given, runs on remote host via SSH                                                                                |
+| `user@host`    | prompt  | If given, runs on remote host via SSH                                                                                |
 
-Without `-c`, `bun run session` starts the `main` session in `~` with a single
-full-screen pane. Layout selection only takes effect when the session is first
-created; reattaching to an existing session preserves its current layout.
+Values not passed on the command line are prompted interactively. Without a
+host, the script lists known LAN devices from the local ARP table, plus a local
+session option. Without `-c`, it prompts for a start directory after the target
+is known. Choosing `~` starts the `main` session with the single layout; choosing
+another directory uses the directory name as the session name and the coding
+layout. Layout selection only takes effect when the session is first created;
+reattaching to an existing session preserves its current layout.
 
 Examples:
 
 ```zsh
-# Local single-pane session
+# Pick target and start directory interactively
 bun run session
 
 # Remote coding layout in ~/home
