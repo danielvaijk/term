@@ -24,6 +24,10 @@ function zvm_after_init() {
 
 source $(brew --prefix)/opt/zsh-vi-mode/share/zsh-vi-mode/zsh-vi-mode.plugin.zsh
 export NVM_DIR="$HOME/.nvm"
+
+# Prefer nvm's current Node symlink over Homebrew's linked node formula.
+[[ -d "$NVM_DIR/current/bin" ]] && path=("$NVM_DIR/current/bin" ${path:#"$NVM_DIR/current/bin"})
+
 NVM_SCRIPT="$(brew --prefix nvm 2>/dev/null)/nvm.sh"
 [[ -r $NVM_SCRIPT ]] && source "$NVM_SCRIPT"
 unset NVM_SCRIPT
