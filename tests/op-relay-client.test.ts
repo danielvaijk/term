@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import * as opRelayClient from "../scripts/op-relay-client";
@@ -57,5 +63,32 @@ describe("op relay client", () => {
       ),
     ).toBe("token=secret suffix");
     expect(seen).toEqual(["op://Private/Item/password"]);
+  });
+
+  test("findRealOp skips generated relay wrapper before real op", () => {
+    const tmp = mkdtempSync(path.join(os.tmpdir(), "op-relay-test."));
+    try {
+      const wrapperDir = path.join(tmp, "wrapper");
+      const realDir = path.join(tmp, "real");
+      mkdirSync(wrapperDir);
+      mkdirSync(realDir);
+
+      const wrapper = path.join(wrapperDir, "op");
+      const real = path.join(realDir, "op");
+      writeFileSync(wrapper, "#!/usr/bin/env bun\nop-relay-client\n");
+      writeFileSync(real, "#!/bin/sh\nexit 0\n");
+      chmodSync(wrapper, 0o755);
+      chmodSync(real, 0o755);
+
+      expect(
+        opRelayClient.findRealOp(
+          `${wrapperDir}:${realDir}`,
+          path.join(tmp, "op-relay-client.ts"),
+          [],
+        ),
+      ).toBe(real);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });

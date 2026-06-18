@@ -264,23 +264,46 @@ async function opInject(args: string[]) {
   return 0;
 }
 
-function whichOp() {
-  const thisScript = realpathSync(process.argv[1]);
-  for (const dir of (process.env.PATH ?? "").split(":")) {
+export function isRelayWrapper(candidate: string) {
+  try {
+    const stat = statSync(candidate);
+    if (!stat.isFile() || stat.size > 64 * 1024) return false;
+    const body = readFileSync(candidate, "utf8");
+    return body.includes("op-relay-client") || body.includes(".term-op-repo");
+  } catch {
+    return false;
+  }
+}
+
+function usableOp(candidate: string, selfPath: string) {
+  try {
+    return (
+      statSync(candidate).isFile() &&
+      realpathSync(candidate) !== selfPath &&
+      !isRelayWrapper(candidate)
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function findRealOp(
+  pathValue = process.env.PATH ?? "",
+  selfPath = realpathSync(process.argv[1]),
+  preferredPaths = ["/opt/homebrew/bin/op", "/usr/local/bin/op"],
+) {
+  for (const candidate of preferredPaths) {
+    if (usableOp(candidate, selfPath)) return candidate;
+  }
+  for (const dir of pathValue.split(":")) {
     const candidate = path.join(dir, "op");
-    try {
-      if (
-        statSync(candidate).isFile() &&
-        realpathSync(candidate) !== thisScript
-      )
-        return candidate;
-    } catch {}
+    if (usableOp(candidate, selfPath)) return candidate;
   }
   return null;
 }
 
 function runRealOp(args: string[]) {
-  const realOp = whichOp();
+  const realOp = findRealOp();
   if (!realOp) {
     process.stderr.write(
       "op-relay: relay unavailable and no local op binary found\n",
@@ -301,10 +324,7 @@ export async function main(args = process.argv.slice(2)) {
     return await printRelayResponse(args);
   if (command === "run") return await opRun(commandArgs);
   if (command === "inject") return await opInject(commandArgs);
-  process.stderr.write(
-    `op-relay: unsupported command while relay is active: ${command}\n`,
-  );
-  return 1;
+  return runRealOp(args);
 }
 
 if (import.meta.main) {

@@ -20,7 +20,6 @@ import path from "node:path";
 const pairPort = 12322;
 const scriptDir = path.dirname(new URL(import.meta.url).pathname);
 const repoRoot = path.dirname(scriptDir);
-const opRelaySock = path.join(os.homedir(), ".op-relay.sock");
 const opRelayPort = "12321";
 
 function shellQuote(value: string) {
@@ -372,6 +371,68 @@ function opRealPath() {
     if (existsSync(candidate)) return candidate;
   }
   return "";
+}
+
+function relayTcpAvailable(timeoutMs = 100) {
+  return new Promise<boolean>((resolve) => {
+    const sock = net.createConnection({
+      host: "127.0.0.1",
+      port: Number.parseInt(opRelayPort, 10),
+    });
+    const timer = setTimeout(() => {
+      sock.destroy();
+      resolve(false);
+    }, timeoutMs);
+    sock.once("connect", () => {
+      clearTimeout(timer);
+      sock.end();
+      resolve(true);
+    });
+    sock.once("error", () => {
+      clearTimeout(timer);
+      resolve(false);
+    });
+  });
+}
+
+function printOpRelayStartFailure(errFile: string) {
+  const err = readFileSync(errFile, "utf8");
+  process.stderr.write(
+    err.includes("Address already in use")
+      ? `error: op relay failed to start because 127.0.0.1:${opRelayPort} is already in use\n`
+      : "error: op relay failed to start\n",
+  );
+}
+
+function startOpRelay(errFile: string) {
+  const opReal = opRealPath();
+  if (!opReal) {
+    process.stderr.write(
+      "error: 1Password CLI (op) not found - install it first (brew install --cask 1password-cli)\n",
+    );
+    process.exit(1);
+  }
+
+  return spawn("bun", ["run", "op-relay"], {
+    cwd: repoRoot,
+    env: { ...process.env, OP_RELAY_BIN: opReal },
+    stderr: Bun.file(errFile),
+    stdout: "ignore",
+    stdin: "ignore",
+  });
+}
+
+async function waitForOpRelay(proc: ReturnType<typeof spawn>, errFile: string) {
+  for (let n = 0; n < 20; n += 1) {
+    await Bun.sleep(100);
+    if (proc.exitCode !== null) {
+      printOpRelayStartFailure(errFile);
+      process.exit(1);
+    }
+    if (await relayTcpAvailable()) return;
+  }
+  process.stderr.write("error: op relay did not become reachable\n");
+  process.exit(1);
 }
 
 type NetworkDevice = {
@@ -735,50 +796,22 @@ async function runRemoteSession(
   const remoteSession = shellQuote(session);
   const remoteCd = remoteCdCommand(cwd);
 
-  const opReal = opRealPath();
-  if (!opReal) {
-    process.stderr.write(
-      "error: 1Password CLI (op) not found - install it first (brew install --cask 1password-cli)\n",
-    );
-    process.exit(1);
-  }
+  opRelayProc = startOpRelay(opRelayErrFile.file);
+  await waitForOpRelay(opRelayProc, opRelayErrFile.file);
 
-  opRelayProc = spawn("bun", ["run", "op-relay"], {
-    cwd: repoRoot,
-    env: { ...process.env, OP_RELAY_BIN: opReal },
-    stderr: Bun.file(opRelayErrFile.file),
-    stdout: "ignore",
-    stdin: "ignore",
-  });
-  for (let n = 0; n < 5; n += 1) {
-    await Bun.sleep(100);
-    if (opRelayProc.exitCode !== null) {
-      const err = readFileSync(opRelayErrFile.file, "utf8");
-      process.stderr.write(
-        err.includes("Address already in use")
-          ? `error: op relay failed to start because 127.0.0.1:${opRelayPort} is already in use\n`
-          : "error: op relay failed to start\n",
-      );
-      process.exit(1);
-    }
-    if (existsSync(opRelaySock)) break;
-  }
-
-  if (existsSync(opRelaySock)) {
-    spawnSync(
-      "ssh",
-      [
-        "-S",
-        ctlSock,
-        "-O",
-        "forward",
-        "-R",
-        `${opRelayPort}:127.0.0.1:${opRelayPort}`,
-        host,
-      ],
-      { stdio: "ignore" },
-    );
-  }
+  spawnSync(
+    "ssh",
+    [
+      "-S",
+      ctlSock,
+      "-O",
+      "forward",
+      "-R",
+      `${opRelayPort}:127.0.0.1:${opRelayPort}`,
+      host,
+    ],
+    { stdio: "ignore" },
+  );
 
   writeFileSync(statusFile.file, `connecting to ${host}...\n`);
 
@@ -794,9 +827,11 @@ async function runRemoteSession(
 #!/usr/bin/env bun
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import path from "node:path";
 
 const repo = readFileSync(new URL("./.term-op-repo", import.meta.url), "utf8").trim();
-const result = spawnSync("bun", ["--cwd", repo, "run", "op-relay-client", ...process.argv.slice(2)], {
+const result = spawnSync("bun", [path.join(repo, "scripts/op-relay-client.ts"), ...process.argv.slice(2)], {
+  cwd: repo,
   stdio: "inherit",
 });
 process.exit(result.status ?? 1);
