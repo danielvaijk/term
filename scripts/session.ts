@@ -816,14 +816,17 @@ async function runRemoteSession(
   writeFileSync(statusFile.file, `connecting to ${host}...\n`);
 
   const remotePrewarm = `
-    export PATH="$HOME/.local/bin:/opt/homebrew/bin:/home/linuxbrew/.linuxbrew/bin:$HOME/.cargo/bin:$PATH"
+    export PATH="$HOME/.term/bin:/opt/homebrew/bin:/home/linuxbrew/.linuxbrew/bin:$HOME/.cargo/bin:$PATH"
     if [ -L ~/.config/zellij/config.kdl ] && [ -n ${shellQuote(origin)} ]; then
       repo=$(git -C "$(dirname "$(readlink ~/.config/zellij/config.kdl)")" rev-parse --show-toplevel 2>/dev/null)
       if [ -n "$repo" ] && [ "$(git -C "$repo" remote get-url origin 2>/dev/null)" = ${shellQuote(origin)} ]; then
         git -C "$repo" pull --ff-only >/dev/null 2>&1 || true
-        mkdir -p ~/.local/bin
-        printf '%s\n' "$repo" > ~/.local/bin/.term-op-repo
-        cat > ~/.local/bin/op <<'TERM_OP_WRAPPER'
+        if [ -f ~/.local/bin/op ] && grep -Eq 'op-relay-client|\\.term-op-repo' ~/.local/bin/op; then
+          rm -f ~/.local/bin/op ~/.local/bin/.term-op-repo
+        fi
+        mkdir -p ~/.term/bin
+        printf '%s\n' "$repo" > ~/.term/bin/.term-op-repo
+        cat > ~/.term/bin/op <<'TERM_OP_WRAPPER'
 #!/usr/bin/env bun
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -836,7 +839,7 @@ const result = spawnSync("bun", [path.join(repo, "scripts/op-relay-client.ts"), 
 });
 process.exit(result.status ?? 1);
 TERM_OP_WRAPPER
-        chmod +x ~/.local/bin/op
+        chmod +x ~/.term/bin/op
       fi
     fi
   `;
@@ -867,7 +870,7 @@ TERM_OP_WRAPPER
 
   cleanupPrewarm();
   const remoteAttach = `
-    export PATH="$HOME/.local/bin:/opt/homebrew/bin:/home/linuxbrew/.linuxbrew/bin:$HOME/.cargo/bin:$PATH"
+    export PATH="$HOME/.term/bin:/opt/homebrew/bin:/home/linuxbrew/.linuxbrew/bin:$HOME/.cargo/bin:$PATH"
     mkdir -p ~/.ssh && ln -sf "$SSH_AUTH_SOCK" ~/.ssh/forwarded-agent.sock
     ${remoteCd}
     if zellij list-sessions --short 2>/dev/null | grep -qx -- ${remoteSession}; then
