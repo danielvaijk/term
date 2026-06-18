@@ -21,6 +21,10 @@ const pairPort = 12322;
 const scriptDir = path.dirname(new URL(import.meta.url).pathname);
 const repoRoot = path.dirname(scriptDir);
 const opRelayPort = "12321";
+const sessionUsersFile = path.join(
+  os.homedir(),
+  ".config/term/session-users.json",
+);
 
 function shellQuote(value: string) {
   return `'${value.replaceAll("'", "'\\''")}'`;
@@ -597,6 +601,34 @@ function sshConfigHosts() {
   );
 }
 
+function readSessionUsers() {
+  try {
+    const users = JSON.parse(readFileSync(sessionUsersFile, "utf8"));
+    if (!users || typeof users !== "object" || Array.isArray(users)) return {};
+
+    return Object.fromEntries(
+      Object.entries(users).filter(
+        ([, username]) => typeof username === "string",
+      ),
+    ) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
+function rememberSuccessfulUsername(sshHost: string) {
+  const at = sshHost.lastIndexOf("@");
+  if (at < 1) return;
+
+  const username = sshHost.slice(0, at);
+  const host = sshHost.slice(at + 1);
+  if (!host) return;
+
+  const users = { ...readSessionUsers(), [host]: username };
+  mkdirSync(path.dirname(sessionUsersFile), { recursive: true });
+  writeFileSync(sessionUsersFile, `${JSON.stringify(users, null, 2)}\n`);
+}
+
 async function chooseHost(existingHost?: string) {
   let selectedHost = existingHost;
 
@@ -631,7 +663,7 @@ async function chooseHost(existingHost?: string) {
 
   const username = await input({
     message: "Username",
-    default: os.userInfo().username,
+    default: readSessionUsers()[selectedHost] ?? os.userInfo().username,
   });
 
   return `${username}@${selectedHost}`;
@@ -785,6 +817,8 @@ async function runRemoteSession(
       process.exit(1);
     }
   }
+
+  rememberSuccessfulUsername(host);
 
   if (promptCwd && !requestedCwdSet) {
     const picked = await chooseRemoteCwd(ctlSock, host);
