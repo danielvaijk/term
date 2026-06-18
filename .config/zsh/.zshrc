@@ -49,5 +49,10 @@ elif [[ -z $SSH_CONNECTION || ! -S ${SSH_AUTH_SOCK:-} ]]; then
   export SSH_AUTH_SOCK="$HOME/Library/Containers/com.maxgoedjen.Secretive.SecretAgent/Data/socket.ssh"
 fi
 
+# Rust toolchain binaries. Prefer rustup shims when present, and fall back to
+# the installed Homebrew/rustup-managed toolchain when shims are absent.
+[[ -d "$HOME/.cargo/bin" ]] && path=("$HOME/.cargo/bin" ${path:#"$HOME/.cargo/bin"})
+[[ -d "$HOME/.rustup/toolchains/1.96.0-aarch64-apple-darwin/bin" ]] && path=("$HOME/.rustup/toolchains/1.96.0-aarch64-apple-darwin/bin" ${path:#"$HOME/.rustup/toolchains/1.96.0-aarch64-apple-darwin/bin"})
+
 # Local binaries take precedence over system-wide installs.
 export PATH="$HOME/.local/bin:$PATH"
