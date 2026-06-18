@@ -117,9 +117,10 @@ set.
 
 ## Remote access security
 
-`bun run session user@host` treats SSH as the device allowlist. Cloudflare
-Tunnel, when used, is only the transport path to the host; a client still needs
-an approved SSH identity before the remote zellij session starts.
+`bun run session user@host` treats SSH as the device allowlist. Connect directly
+to the host by IP address or hostname, either on the local network or over a mesh
+network such as Tailscale. A client still needs an approved SSH identity before
+the remote zellij session starts.
 
 Use one hardware-backed SSH identity per physical client device:
 
@@ -205,7 +206,7 @@ this repo. A Secretive-backed Mac can use:
 
 ```
 Host my-remote
-  HostName tunnel.vandijk.sh
+  HostName 100.64.0.10
   User danielvaijk
   IdentityAgent ~/Library/Containers/com.maxgoedjen.Secretive.SecretAgent/Data/socket.ssh
   IdentityFile ~/.ssh/my-secretive-device-key.pub
@@ -217,7 +218,7 @@ A hardware-token client can use:
 
 ```
 Host my-remote
-  HostName tunnel.vandijk.sh
+  HostName 192.168.1.50
   User danielvaijk
   IdentityFile ~/.ssh/id_ed25519_sk_device
   IdentitiesOnly yes
