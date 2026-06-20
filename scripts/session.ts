@@ -25,6 +25,7 @@ const sessionUsersFile = path.join(
   os.homedir(),
   ".config/term/session-users.json",
 );
+const vimMovementTheme = { keybindings: ["vim"] as const };
 
 function shellQuote(value: string) {
   return `'${value.replaceAll("'", "'\\''")}'`;
@@ -753,6 +754,7 @@ async function chooseHost(existingHost?: string) {
     const configHosts = sshConfigHosts();
     const picked = await select<string>({
       message: "Select a target",
+      theme: vimMovementTheme,
       choices: [
         { name: "This Mac (local)", value: "__local__" },
         ...devices.map((device) => ({
@@ -804,6 +806,7 @@ function localHomeDirs() {
 async function chooseLocalCwd() {
   const picked = await select<string>({
     message: "Start directory",
+    theme: vimMovementTheme,
     choices: [
       { name: "Home (~), single layout", value: "__home__" },
       ...localHomeDirs().map((dir) => ({
@@ -851,6 +854,7 @@ async function chooseRemoteCwd(ctlSock: string, sshHost: string) {
   const dirs = remoteHomeDirs(ctlSock, sshHost);
   const picked = await select<string>({
     message: "Start directory",
+    theme: vimMovementTheme,
     choices: [
       { name: "Home (~), single layout", value: "__home__" },
       ...dirs.map((dir) => ({
