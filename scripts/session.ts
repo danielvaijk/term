@@ -61,8 +61,17 @@ function validPublicKeyLine(line: string) {
   );
 }
 
-function commandOutput(command: string, args: string[], input?: string) {
-  return spawnSync(command, args, { input, encoding: "utf8" });
+function commandOutput(
+  command: string,
+  args: string[],
+  input?: string,
+  env?: NodeJS.ProcessEnv,
+) {
+  return spawnSync(command, args, {
+    input,
+    encoding: "utf8",
+    env: env ? { ...process.env, ...env } : process.env,
+  });
 }
 
 function fingerprintPublicKey(key: string) {
@@ -215,6 +224,17 @@ function resolvedPairingHost(sshHost: string) {
   return match?.split(/\s+/, 2)[1] ?? "";
 }
 
+function resolvedIdentityAgent(sshHost: string) {
+  const result = commandOutput("ssh", ["-G", sshHost]);
+  const match = result.stdout
+    .split(/\r?\n/)
+    .find((line) => line.toLowerCase().startsWith("identityagent "));
+  const value = match?.split(/\s+/, 2)[1];
+  if (!value || value.toLowerCase() === "none") return "";
+  if (value === "SSH_AUTH_SOCK") return process.env.SSH_AUTH_SOCK ?? "";
+  return expandHome(value);
+}
+
 function resolvedKnownHostTarget(sshHost: string) {
   const result = commandOutput("ssh", ["-G", sshHost]);
   const config = new Map(
@@ -232,7 +252,13 @@ function resolvedKnownHostTarget(sshHost: string) {
 }
 
 function offerAgentKeysForPairing(sshHost: string) {
-  const keys = commandOutput("ssh-add", ["-L"])
+  const identityAgent = resolvedIdentityAgent(sshHost);
+  const keys = commandOutput(
+    "ssh-add",
+    ["-L"],
+    undefined,
+    identityAgent ? { SSH_AUTH_SOCK: identityAgent } : undefined,
+  )
     .stdout.split(/\r?\n/)
     .filter((line) => /^(ssh-|ecdsa-|sk-)/.test(line));
   if (!keys.length) {
