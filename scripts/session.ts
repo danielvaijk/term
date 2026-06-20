@@ -477,6 +477,17 @@ type ArpDevice = {
   iface: string;
 };
 
+type TailscalePeer = {
+  HostName?: unknown;
+  DNSName?: unknown;
+  TailscaleIPs?: unknown;
+  Online?: unknown;
+};
+
+type TailscaleStatus = {
+  Peer?: unknown;
+};
+
 function reverseDnsName(ip: string) {
   const host = commandOutput("dig", ["+short", "-x", ip])
     .stdout.split(/\r?\n/, 1)[0]
@@ -552,6 +563,82 @@ async function localNetworkDevices() {
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+}
+
+function isTailscalePeer(value: unknown): value is TailscalePeer {
+  return Boolean(value && typeof value === "object");
+}
+
+function tailscalePeerIpv4(peer: TailscalePeer) {
+  if (!Array.isArray(peer.TailscaleIPs)) return "";
+
+  return (
+    peer.TailscaleIPs.find(
+      (ip): ip is string =>
+        typeof ip === "string" && /^\d+\.\d+\.\d+\.\d+$/.test(ip),
+    ) ?? ""
+  );
+}
+
+async function tailscaleDevices() {
+  const result = commandOutput("tailscale", ["status", "--json"]);
+  if (result.status !== 0) return [];
+
+  let status: TailscaleStatus;
+  try {
+    status = JSON.parse(result.stdout) as TailscaleStatus;
+  } catch {
+    return [];
+  }
+
+  const peers =
+    status.Peer && typeof status.Peer === "object"
+      ? Object.values(status.Peer).filter(isTailscalePeer)
+      : [];
+
+  const candidates = peers
+    .filter((peer) => peer.Online === true)
+    .map((peer) => {
+      const ip = tailscalePeerIpv4(peer);
+      if (!ip) return undefined;
+
+      const dnsName =
+        typeof peer.DNSName === "string" ? peer.DNSName.replace(/\.$/, "") : "";
+      const hostName =
+        typeof peer.HostName === "string" && peer.HostName.trim()
+          ? peer.HostName.trim()
+          : "";
+
+      return {
+        ip,
+        name: hostName || dnsName || ip,
+      };
+    })
+    .filter((peer) => peer !== undefined);
+
+  const openDevices = await Promise.all(
+    candidates.map(async (peer) =>
+      (await canConnect(peer.ip, 22)) ? peer : undefined,
+    ),
+  );
+
+  return openDevices
+    .filter((peer) => peer !== undefined)
+    .map((peer) => ({
+      host: peer.ip,
+      name: peer.name,
+      detail: `${peer.ip}, Tailscale`,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+}
+
+function dedupeDevices(devices: NetworkDevice[]) {
+  const byHost = new Map<string, NetworkDevice>();
+  for (const device of devices) {
+    if (!byHost.has(device.host)) byHost.set(device.host, device);
+  }
+
+  return [...byHost.values()];
 }
 
 function expandGlob(pattern: string) {
@@ -659,7 +746,10 @@ async function chooseHost(existingHost?: string) {
   let selectedHost = existingHost;
 
   if (!selectedHost) {
-    const devices = await localNetworkDevices();
+    const devices = dedupeDevices([
+      ...(await localNetworkDevices()),
+      ...(await tailscaleDevices()),
+    ]);
     const configHosts = sshConfigHosts();
     const picked = await select<string>({
       message: "Select a target",
