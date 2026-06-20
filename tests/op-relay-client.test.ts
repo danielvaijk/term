@@ -91,4 +91,18 @@ describe("op relay client", () => {
       rmSync(tmp, { recursive: true, force: true });
     }
   });
+
+  test("relay commands fail closed in ssh sessions", () => {
+    expect(
+      opRelayClient.shouldFailClosed(["run", "--env-file=.env"], {
+        SSH_CONNECTION: "client 1 server 22",
+      }),
+    ).toBe(true);
+    expect(opRelayClient.shouldFailClosed(["run"], {})).toBe(false);
+    expect(
+      opRelayClient.shouldFailClosed(["item", "list"], {
+        SSH_CONNECTION: "client 1 server 22",
+      }),
+    ).toBe(false);
+  });
 });

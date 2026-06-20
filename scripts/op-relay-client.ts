@@ -313,11 +313,24 @@ function runRealOp(args: string[]) {
   return spawnSync(realOp, args, { stdio: "inherit" }).status ?? 1;
 }
 
+export function shouldFailClosed(args: string[], env = process.env) {
+  return (
+    Boolean(env.SSH_CONNECTION) &&
+    ["read", "run", "inject", "whoami"].includes(args[0] ?? "")
+  );
+}
+
 export async function main(args = process.argv.slice(2)) {
   const available = await relayAvailable();
   if (!args.length)
     return available ? await printRelayResponse(["whoami"]) : runRealOp(args);
-  if (!available) return runRealOp(args);
+  if (!available) {
+    if (shouldFailClosed(args)) {
+      process.stderr.write("op-relay: relay unavailable in SSH session\n");
+      return 1;
+    }
+    return runRealOp(args);
+  }
 
   const [command, ...commandArgs] = args;
   if (command === "read" || command === "whoami")
