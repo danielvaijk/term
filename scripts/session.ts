@@ -984,7 +984,6 @@ import path from "node:path";
 
 const repo = readFileSync(new URL("./.term-op-repo", import.meta.url), "utf8").trim();
 const result = spawnSync("bun", [path.join(repo, "scripts/op-relay-client.ts"), ...process.argv.slice(2)], {
-  cwd: repo,
   stdio: "inherit",
 });
 process.exit(result.status ?? 1);
