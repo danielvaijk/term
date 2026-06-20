@@ -39,14 +39,28 @@ if [[ -o interactive && -t 0 && -z $ZELLIJ && -r "$TERM_REPO/package.json" ]]; t
 fi
 unset TERM_REPO
 
-# Route SSH agent requests through Secretive for Touch ID-backed key signing.
-# Exception: inside an SSH session that forwarded an agent (ssh -A), use the
-# stable symlink that session.ts updates on each connection. This ensures
-# shells surviving a reconnect (zellij panes) pick up the fresh socket.
-if [[ -n $SSH_CONNECTION && -S ~/.ssh/forwarded-agent.sock ]]; then
-  export SSH_AUTH_SOCK="$HOME/.ssh/forwarded-agent.sock"
-elif [[ -z $SSH_CONNECTION || ! -S ${SSH_AUTH_SOCK:-} ]]; then
-  export SSH_AUTH_SOCK="$HOME/Library/Containers/com.maxgoedjen.Secretive.SecretAgent/Data/socket.ssh"
+# Keep zellij panes on the forwarded SSH agent after reconnects.
+function term_refresh_ssh_agent() {
+  if [[ -n $SSH_CONNECTION ]]; then
+    local stable="$HOME/.ssh/forwarded-agent.sock"
+    if [[ -S ${SSH_AUTH_SOCK:-} && $SSH_AUTH_SOCK != "$stable" ]]; then
+      mkdir -p "$HOME/.ssh"
+      ln -sf "$SSH_AUTH_SOCK" "$stable"
+    elif [[ ! -S $stable ]]; then
+      local newest=("$HOME"/.ssh/agent/*.sshd.*(N.om[1]))
+      [[ -n $newest[1] ]] && ln -sf "$newest[1]" "$stable"
+    fi
+    [[ -S $stable ]] && export SSH_AUTH_SOCK="$stable"
+    return
+  fi
+
+  if [[ ! -S ${SSH_AUTH_SOCK:-} ]]; then
+    export SSH_AUTH_SOCK="$HOME/Library/Containers/com.maxgoedjen.Secretive.SecretAgent/Data/socket.ssh"
+  fi
+}
+term_refresh_ssh_agent
+if (( ${precmd_functions[(Ie)term_refresh_ssh_agent]} == 0 )); then
+  precmd_functions+=(term_refresh_ssh_agent)
 fi
 
 # Rust toolchain binaries. Prefer rustup shims when present, and fall back to
