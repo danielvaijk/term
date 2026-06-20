@@ -2,6 +2,10 @@ PROMPT='$ '
 
 source <(/opt/homebrew/bin/brew shellenv)
 
+if [[ -n $SSH_CONNECTION && -d "$HOME/.term/bin" ]]; then
+  path=("$HOME/.term/bin" ${path:#"$HOME/.term/bin"})
+fi
+
 # Syntax highlighting should be sourced before the rest.
 source $(brew --prefix)/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 source $(brew --prefix)/share/zsh-history-substring-search/zsh-history-substring-search.zsh
