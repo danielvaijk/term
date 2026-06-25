@@ -547,23 +547,6 @@ async function resolveBonjourInstance(
   };
 }
 
-function canConnect(host: string, port: number) {
-  return new Promise<boolean>((resolve) => {
-    const socket = net.createConnection({ host, port });
-    let settled = false;
-
-    const settle = (open: boolean) => {
-      if (settled) return;
-      settled = true;
-      socket.destroy();
-      resolve(open);
-    };
-
-    socket.once("connect", () => settle(true));
-    socket.once("error", () => settle(false));
-  });
-}
-
 async function withSpinner<T>(message: string, work: Promise<T>) {
   const frames = ["-", "\\", "|", "/"];
   const started = Date.now();
@@ -597,14 +580,7 @@ async function bonjourDevices() {
     if (!byHost.has(instance.host)) byHost.set(instance.host, instance);
   }
 
-  const openDevices = await Promise.all(
-    [...byHost.values()].map(async (instance) =>
-      (await canConnect(instance.host, instance.port)) ? instance : undefined,
-    ),
-  );
-
-  return openDevices
-    .filter((instance) => instance !== undefined)
+  return [...byHost.values()]
     .map((instance) => ({
       host: instance.host,
       name: instance.name,
@@ -667,14 +643,7 @@ async function tailscaleDevices() {
     })
     .filter((peer) => peer !== undefined);
 
-  const openDevices = await Promise.all(
-    candidates.map(async (peer) =>
-      (await canConnect(peer.ip, 22)) ? peer : undefined,
-    ),
-  );
-
-  return openDevices
-    .filter((peer) => peer !== undefined)
+  return candidates
     .map((peer) => ({
       host: peer.ip,
       name: peer.name,
