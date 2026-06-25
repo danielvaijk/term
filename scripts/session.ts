@@ -557,10 +557,17 @@ async function withSpinner<T>(message: string, work: Promise<T>) {
       `\r${frames[frame++ % frames.length]} ${message} ${elapsed}s (Ctrl-C to abort)`,
     );
   }, 100);
+  const abort = () => {
+    clearInterval(timer);
+    process.stderr.write("\r\x1b[K\n");
+    process.exit(0);
+  };
 
   try {
+    process.once("SIGINT", abort);
     return await work;
   } finally {
+    process.off("SIGINT", abort);
     clearInterval(timer);
     process.stderr.write("\r\x1b[K");
   }
@@ -867,7 +874,7 @@ async function runRemoteSession(
   process.on("exit", cleanupAll);
   process.on("SIGINT", () => {
     cleanupAll();
-    process.exit(130);
+    process.exit(0);
   });
   process.on("SIGTERM", () => {
     cleanupAll();
@@ -1048,7 +1055,7 @@ async function main() {
 await main().catch((error) => {
   if (isPromptInterrupt(error)) {
     process.stdout.write("\n");
-    process.exit(130);
+    process.exit(0);
   }
 
   throw error;
