@@ -9,7 +9,6 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
-  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -472,10 +471,10 @@ type NetworkDevice = {
   detail: string;
 };
 
-type ArpDevice = {
-  ip: string;
-  rawName: string;
-  iface: string;
+type BonjourInstance = {
+  name: string;
+  host: string;
+  port: number;
 };
 
 type TailscalePeer = {
@@ -489,19 +488,43 @@ type TailscaleStatus = {
   Peer?: unknown;
 };
 
-function reverseDnsName(ip: string) {
-  const host = commandOutput("dig", ["+short", "-x", ip])
-    .stdout.split(/\r?\n/, 1)[0]
-    ?.trim()
-    .replace(/\.$/, "");
+function dnsSdOutput(args: string[], timeoutMs: number) {
+  return (
+    spawnSync("dns-sd", args, {
+      encoding: "utf8",
+      timeout: timeoutMs,
+      killSignal: "SIGKILL",
+    }).stdout ?? ""
+  );
+}
 
-  if (host) return host;
+function bonjourInstanceNames(timeoutMs = 2000) {
+  const output = dnsSdOutput(["-B", "_ssh._tcp", "local."], timeoutMs);
+  const names = new Set<string>();
 
-  const fallback = commandOutput("host", [ip]).stdout.match(
-    /domain name pointer (.+?)\.$/,
-  )?.[1];
+  for (const line of output.split(/\r?\n/)) {
+    const match = line.match(
+      /\bAdd\b\s+\S+\s+\d+\s+\S+\s+_ssh\._tcp\.\s+(.+?)\s*$/,
+    );
+    if (match) names.add(match[1]);
+  }
 
-  return fallback ?? "";
+  return [...names];
+}
+
+function resolveBonjourInstance(
+  name: string,
+  timeoutMs = 2000,
+): BonjourInstance | undefined {
+  const output = dnsSdOutput(["-L", name, "_ssh._tcp", "local."], timeoutMs);
+  const match = output.match(/can be reached at (\S+?):(\d+)\b/);
+  if (!match) return undefined;
+
+  return {
+    name,
+    host: match[1].replace(/\.$/, ""),
+    port: Number.parseInt(match[2], 10),
+  };
 }
 
 function canConnect(host: string, port: number, timeoutMs = 500) {
@@ -523,46 +546,32 @@ function canConnect(host: string, port: number, timeoutMs = 500) {
   });
 }
 
-async function localNetworkDevices() {
-  const devices = new Map<string, ArpDevice>();
-  const result = commandOutput("arp", ["-a"]);
+async function bonjourDevices() {
+  const instances = bonjourInstanceNames()
+    .map((name) => resolveBonjourInstance(name))
+    .filter((instance) => instance !== undefined);
 
-  for (const line of result.stdout.split(/\r?\n/)) {
-    const match = line.match(
-      /^(.+?) \((\d+\.\d+\.\d+\.\d+)\) at (.+?) on (\S+)/,
-    );
-    if (!match) continue;
-
-    const [, rawName, ip, mac, iface] = match;
-    if (mac === "(incomplete)") continue;
-
-    devices.set(ip, {
-      ip,
-      rawName,
-      iface,
-    });
+  const byHost = new Map<string, BonjourInstance>();
+  for (const instance of instances) {
+    if (!byHost.has(instance.host)) byHost.set(instance.host, instance);
   }
 
   const openDevices = await Promise.all(
-    [...devices.values()].map(async (device) =>
-      (await canConnect(device.ip, 22)) ? device : undefined,
+    [...byHost.values()].map(async (instance) =>
+      (await canConnect(instance.host, instance.port)) ? instance : undefined,
     ),
   );
 
   return openDevices
-    .filter((device) => device !== undefined)
-    .map((device) => {
-      const dnsName = reverseDnsName(device.ip);
-      const name =
-        dnsName || (device.rawName === "?" ? device.ip : device.rawName);
-
-      return {
-        host: device.ip,
-        name,
-        detail:
-          name === device.ip ? device.iface : `${device.ip}, ${device.iface}`,
-      };
-    })
+    .filter((instance) => instance !== undefined)
+    .map((instance) => ({
+      host: instance.host,
+      name: instance.name,
+      detail:
+        instance.port === 22
+          ? `${instance.host}, Bonjour`
+          : `${instance.host}:${instance.port}, Bonjour`,
+    }))
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 }
 
@@ -642,79 +651,6 @@ function dedupeDevices(devices: NetworkDevice[]) {
   return [...byHost.values()];
 }
 
-function expandGlob(pattern: string) {
-  const dir = path.dirname(pattern);
-  const basename = path.basename(pattern);
-  if (!basename.includes("*")) return existsSync(pattern) ? [pattern] : [];
-
-  const expression = new RegExp(
-    `^${basename
-      .split("*")
-      .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-      .join(".*")}$`,
-  );
-
-  try {
-    return readdirSync(dir)
-      .filter((entry) => expression.test(entry))
-      .map((entry) => path.join(dir, entry));
-  } catch {
-    return [];
-  }
-}
-
-function collectSshConfigHosts(file: string, seen = new Set<string>()) {
-  const hosts = new Set<string>();
-  let resolved: string;
-
-  try {
-    resolved = realpathSync(file);
-  } catch {
-    return hosts;
-  }
-
-  if (seen.has(resolved)) return hosts;
-  seen.add(resolved);
-
-  for (const line of readFileSync(resolved, "utf8").split(/\r?\n/)) {
-    const trimmed = line.replace(/#.*/, "").trim();
-    if (!trimmed) continue;
-
-    const include = trimmed.match(/^include\s+(.+)$/i);
-    if (include) {
-      for (const rawPattern of include[1].split(/\s+/)) {
-        const pattern = rawPattern.startsWith("~/")
-          ? path.join(os.homedir(), rawPattern.slice(2))
-          : path.resolve(path.dirname(resolved), rawPattern);
-
-        for (const included of expandGlob(pattern)) {
-          for (const host of collectSshConfigHosts(included, seen)) {
-            hosts.add(host);
-          }
-        }
-      }
-      continue;
-    }
-
-    const hostLine = trimmed.match(/^host\s+(.+)$/i);
-    if (!hostLine) continue;
-
-    for (const host of hostLine[1].split(/\s+/)) {
-      if (host && !host.includes("*") && !host.includes("?")) hosts.add(host);
-    }
-  }
-
-  return hosts;
-}
-
-function sshConfigHosts() {
-  const hosts = collectSshConfigHosts(path.join(os.homedir(), ".ssh/config"));
-
-  return [...hosts].sort((a, b) =>
-    a.localeCompare(b, undefined, { numeric: true }),
-  );
-}
-
 function readSessionUsers() {
   try {
     const users = JSON.parse(readFileSync(sessionUsersFile, "utf8"));
@@ -748,10 +684,9 @@ async function chooseHost(existingHost?: string) {
 
   if (!selectedHost) {
     const devices = dedupeDevices([
-      ...(await localNetworkDevices()),
+      ...(await bonjourDevices()),
       ...(await tailscaleDevices()),
     ]);
-    const configHosts = sshConfigHosts();
     const picked = await select<string>({
       message: "Select a target",
       theme: vimMovementTheme,
@@ -760,10 +695,6 @@ async function chooseHost(existingHost?: string) {
         ...devices.map((device) => ({
           name: `${device.name} (${device.detail})`,
           value: device.host,
-        })),
-        ...configHosts.map((host) => ({
-          name: `${host} (~/.ssh/config)`,
-          value: host,
         })),
         { name: "Enter host manually", value: "__manual__" },
       ],
