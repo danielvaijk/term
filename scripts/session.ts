@@ -488,18 +488,36 @@ type TailscaleStatus = {
   Peer?: unknown;
 };
 
-function dnsSdOutput(args: string[], timeoutMs: number) {
-  return (
-    spawnSync("dns-sd", args, {
-      encoding: "utf8",
-      timeout: timeoutMs,
-      killSignal: "SIGKILL",
-    }).stdout ?? ""
-  );
+function dnsSdOutput(args: string[], ready: RegExp) {
+  return new Promise<string>((resolve) => {
+    const child = spawn("dns-sd", args, {
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    let output = "";
+    let settled = false;
+
+    const settle = () => {
+      if (settled) return;
+      settled = true;
+      child.kill("SIGKILL");
+      resolve(output);
+    };
+
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      output += chunk;
+      if (ready.test(output)) settle();
+    });
+    child.once("error", settle);
+    child.once("exit", settle);
+  });
 }
 
-function bonjourInstanceNames(timeoutMs = 2000) {
-  const output = dnsSdOutput(["-B", "_ssh._tcp", "local."], timeoutMs);
+async function bonjourInstanceNames() {
+  const output = await dnsSdOutput(
+    ["-B", "_ssh._tcp", "local."],
+    /\bAdd\b\s+\S+\s+\d+\s+\S+\s+_ssh\._tcp\.\s+(.+?)\s*$/m,
+  );
   const names = new Set<string>();
 
   for (const line of output.split(/\r?\n/)) {
@@ -512,11 +530,13 @@ function bonjourInstanceNames(timeoutMs = 2000) {
   return [...names];
 }
 
-function resolveBonjourInstance(
+async function resolveBonjourInstance(
   name: string,
-  timeoutMs = 2000,
-): BonjourInstance | undefined {
-  const output = dnsSdOutput(["-L", name, "_ssh._tcp", "local."], timeoutMs);
+): Promise<BonjourInstance | undefined> {
+  const output = await dnsSdOutput(
+    ["-L", name, "_ssh._tcp", "local."],
+    /can be reached at \S+?:\d+\b/,
+  );
   const match = output.match(/can be reached at (\S+?):(\d+)\b/);
   if (!match) return undefined;
 
@@ -527,7 +547,7 @@ function resolveBonjourInstance(
   };
 }
 
-function canConnect(host: string, port: number, timeoutMs = 500) {
+function canConnect(host: string, port: number) {
   return new Promise<boolean>((resolve) => {
     const socket = net.createConnection({ host, port });
     let settled = false;
@@ -539,17 +559,38 @@ function canConnect(host: string, port: number, timeoutMs = 500) {
       resolve(open);
     };
 
-    socket.setTimeout(timeoutMs);
     socket.once("connect", () => settle(true));
-    socket.once("timeout", () => settle(false));
     socket.once("error", () => settle(false));
   });
 }
 
+async function withSpinner<T>(message: string, work: Promise<T>) {
+  const frames = ["-", "\\", "|", "/"];
+  const started = Date.now();
+  let frame = 0;
+  const timer = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - started) / 1000);
+    process.stderr.write(
+      `\r${frames[frame++ % frames.length]} ${message} ${elapsed}s (Ctrl-C to abort)`,
+    );
+  }, 100);
+
+  try {
+    return await work;
+  } finally {
+    clearInterval(timer);
+    process.stderr.write("\r\x1b[K");
+  }
+}
+
 async function bonjourDevices() {
-  const instances = bonjourInstanceNames()
-    .map((name) => resolveBonjourInstance(name))
-    .filter((instance) => instance !== undefined);
+  const instances = (
+    await Promise.all(
+      (await bonjourInstanceNames()).map((name) =>
+        resolveBonjourInstance(name),
+      ),
+    )
+  ).filter((instance) => instance !== undefined);
 
   const byHost = new Map<string, BonjourInstance>();
   for (const instance of instances) {
@@ -651,6 +692,13 @@ function dedupeDevices(devices: NetworkDevice[]) {
   return [...byHost.values()];
 }
 
+async function networkDevices() {
+  const tailscale = await tailscaleDevices();
+
+  if (tailscale.length) return dedupeDevices(tailscale);
+  return dedupeDevices(await bonjourDevices());
+}
+
 function readSessionUsers() {
   try {
     const users = JSON.parse(readFileSync(sessionUsersFile, "utf8"));
@@ -683,10 +731,10 @@ async function chooseHost(existingHost?: string) {
   let selectedHost = existingHost;
 
   if (!selectedHost) {
-    const devices = dedupeDevices([
-      ...(await bonjourDevices()),
-      ...(await tailscaleDevices()),
-    ]);
+    const devices = await withSpinner(
+      "checking network hosts",
+      networkDevices(),
+    );
     const picked = await select<string>({
       message: "Select a target",
       theme: vimMovementTheme,
