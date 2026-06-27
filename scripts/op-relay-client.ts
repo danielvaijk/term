@@ -217,15 +217,22 @@ function parseRun(args: string[]): RunSpec {
 async function opRun(args: string[]) {
   const spec = parseRun(args);
   const env: NodeJS.ProcessEnv = { ...process.env };
+  const envFileEnv: Record<string, string> = {};
+
+  for (const envFile of spec.envFiles)
+    Object.assign(envFileEnv, await loadEnvFile(envFile, spec.accountArgs));
+
   for (const [key, value] of Object.entries(env)) {
-    if (value?.includes("op://"))
+    if (!(key in envFileEnv) && value?.includes("op://"))
       env[key] = await resolveRefs(value, spec.accountArgs);
   }
-  for (const envFile of spec.envFiles)
-    Object.assign(env, await loadEnvFile(envFile, spec.accountArgs));
+  Object.assign(env, envFileEnv);
+
   return (
-    spawnSync(spec.command[0], spec.command.slice(1), { env, stdio: "inherit" })
-      .status ?? 1
+    spawnSync(spec.command[0], spec.command.slice(1), {
+      env,
+      stdio: "inherit",
+    }).status ?? 1
   );
 }
 

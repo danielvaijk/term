@@ -16,15 +16,6 @@ const pidPath = `${sockPath}.pid`;
 const opBin = process.env.OP_RELAY_BIN ?? "op";
 const timeout =
   Number.parseInt(process.env.OP_RELAY_TIMEOUT ?? "60", 10) * 1000;
-const isolateCommands = !["0", "false", "False"].includes(
-  process.env.OP_RELAY_ISOLATE_COMMANDS ?? "1",
-);
-const signoutAfterRead = !["0", "false", "False"].includes(
-  process.env.OP_RELAY_SIGNOUT_AFTER_READ ?? "1",
-);
-const signoutArgs = (process.env.OP_RELAY_SIGNOUT_ARGS ?? "signout --all")
-  .split(/\s+/)
-  .filter(Boolean);
 
 const allowedReadFlags = new Set(["--account", "--cache"]);
 const allowedDirectCommands = new Set(["read", "whoami"]);
@@ -92,7 +83,7 @@ async function runCommand(
     let stderr = "";
     const child = spawn(opBin, args, {
       env,
-      detached: isolateCommands,
+      detached: true,
       stdio: ["ignore", "pipe", "pipe"],
     });
     const timer = setTimeout(() => child.kill("SIGTERM"), timeout);
@@ -113,16 +104,7 @@ async function runCommand(
 async function runOp(args: string[]): Promise<RelayResponse> {
   const env = { ...process.env };
   delete env.OP_SESSION;
-  const result = await runCommand(args, env);
-  if (signoutAfterRead && args[0] === "read") {
-    const signout = spawnSync(opBin, signoutArgs, {
-      encoding: "utf8",
-      timeout,
-    });
-    if (signout.status !== 0)
-      result.stderr += signout.stderr || "op-relay: op signout failed\n";
-  }
-  return result;
+  return await runCommand(args, env);
 }
 
 function handleClient(conn: net.Socket) {
