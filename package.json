@@ -4,14 +4,14 @@
   "type": "module",
   "scripts": {
     "format": "prettier --write .",
-    "harden-sshd": "bun scripts/harden-sshd.ts",
-    "ip": "bun scripts/ip.ts",
-    "op-relay": "bun scripts/op-relay.ts",
-    "op-relay-client": "bun scripts/op-relay-client.ts",
-    "session": "bun scripts/session.ts",
-    "setup": "bun scripts/setup.ts",
-    "setup-sudo-touch-id": "bun scripts/setup-sudo-touch-id.ts",
-    "splash": "bun scripts/splash.ts",
+    "harden-sshd": "scripts/harden-sshd.ts",
+    "ip": "scripts/ip.ts",
+    "op-relay": "scripts/op-relay.ts",
+    "op-relay-client": "scripts/op-relay-client.ts",
+    "session": "scripts/session.ts",
+    "setup": "scripts/setup.ts",
+    "setup-sudo-touch-id": "scripts/setup-sudo-touch-id.ts",
+    "splash": "scripts/splash.ts",
     "test": "bun test"
   },
   "devDependencies": {
