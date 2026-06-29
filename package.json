@@ -5,6 +5,7 @@
   "scripts": {
     "format": "prettier --write .",
     "harden-sshd": "bun scripts/harden-sshd.ts",
+    "ip": "bun scripts/ip.ts",
     "op-relay": "bun scripts/op-relay.ts",
     "op-relay-client": "bun scripts/op-relay-client.ts",
     "session": "bun scripts/session.ts",
