@@ -659,21 +659,29 @@ async function tailscaleDevices() {
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 }
 
-function dedupeDevices(devices: NetworkDevice[]) {
-  const byHost = new Map<string, NetworkDevice>();
-  for (const device of devices) {
-    if (!byHost.has(device.host)) byHost.set(device.host, device);
-  }
+type ScanSource = {
+  id: string;
+  name: string;
+  description: string;
+  scan: () => Promise<NetworkDevice[]>;
+};
 
-  return [...byHost.values()];
-}
-
-async function networkDevices() {
-  const tailscale = await tailscaleDevices();
-
-  if (tailscale.length) return dedupeDevices(tailscale);
-  return dedupeDevices(await bonjourDevices());
-}
+const scanSources: ScanSource[] = [
+  {
+    id: "tailscale",
+    name: "Scan Tailscale network…",
+    description:
+      "Queries the local Tailscale daemon (tailscale status). Local-only, no network packets — safe on managed networks.",
+    scan: tailscaleDevices,
+  },
+  {
+    id: "bonjour",
+    name: "Scan local network (Bonjour)…",
+    description:
+      "Browses the LAN via mDNS (dns-sd -B _ssh._tcp). On managed networks this can resemble host enumeration / lateral movement and may trigger security monitoring (e.g. Defender ATP).",
+    scan: bonjourDevices,
+  },
+];
 
 function readSessionUsers() {
   try {
@@ -703,22 +711,35 @@ function rememberSuccessfulUsername(sshHost: string) {
   writeFileSync(sessionUsersFile, `${JSON.stringify(users, null, 2)}\n`);
 }
 
-async function chooseHost(existingHost?: string) {
-  let selectedHost = existingHost;
+async function runScan(source: ScanSource) {
+  const started = Date.now();
+  const devices = await withSpinner(`scanning ${source.id}`, source.scan());
+  const elapsed = ((Date.now() - started) / 1000).toFixed(1);
+  const count = devices.length;
+  process.stderr.write(
+    `${source.id}: found ${count} host${count === 1 ? "" : "s"} in ${elapsed}s\n`,
+  );
+  return devices;
+}
 
-  if (!selectedHost) {
-    const devices = await withSpinner(
-      "checking network hosts",
-      networkDevices(),
-    );
+async function pickNetworkHost() {
+  const discovered: NetworkDevice[] = [];
+  const pending = [...scanSources];
+
+  for (;;) {
     const picked = await select<string>({
       message: "Select a target",
       theme: vimMovementTheme,
       choices: [
         { name: "This Mac (local)", value: "__local__" },
-        ...devices.map((device) => ({
+        ...discovered.map((device) => ({
           name: `${device.name} (${device.detail})`,
           value: device.host,
+        })),
+        ...pending.map((source) => ({
+          name: source.name,
+          value: `__scan:${source.id}__`,
+          description: source.description,
         })),
         { name: "Enter host manually", value: "__manual__" },
       ],
@@ -726,11 +747,33 @@ async function chooseHost(existingHost?: string) {
 
     if (picked === "__local__") return undefined;
 
-    selectedHost =
-      picked === "__manual__"
-        ? await input({ message: "Host or IP address" })
-        : picked;
+    if (picked === "__manual__") {
+      const host = await input({ message: "Host or IP address" });
+      if (!host.trim()) process.exit(0);
+      return host;
+    }
+
+    const scanMatch = picked.match(/^__scan:(.+)__$/);
+    if (scanMatch) {
+      const index = pending.findIndex((source) => source.id === scanMatch[1]);
+      if (index === -1) continue;
+      const [source] = pending.splice(index, 1);
+      for (const device of await runScan(source)) {
+        if (!discovered.some((existing) => existing.host === device.host)) {
+          discovered.push(device);
+        }
+      }
+      continue;
+    }
+
+    return picked;
   }
+}
+
+async function chooseHost(existingHost?: string) {
+  const selectedHost = existingHost ?? (await pickNetworkHost());
+
+  if (selectedHost === undefined) return undefined;
 
   if (selectedHost.includes("@")) return selectedHost;
 
