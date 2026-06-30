@@ -24,6 +24,10 @@ const sessionUsersFile = path.join(
   os.homedir(),
   ".config/term/session-users.json",
 );
+const sessionHostFile = path.join(
+  os.homedir(),
+  ".config/term/session-host.json",
+);
 const vimMovementTheme = { keybindings: ["vim"] as const };
 
 function shellQuote(value: string) {
@@ -711,6 +715,20 @@ function rememberSuccessfulUsername(sshHost: string) {
   writeFileSync(sessionUsersFile, `${JSON.stringify(users, null, 2)}\n`);
 }
 
+function readLastManualHost() {
+  try {
+    const value = JSON.parse(readFileSync(sessionHostFile, "utf8"));
+    return value && typeof value.host === "string" ? value.host : "";
+  } catch {
+    return "";
+  }
+}
+
+function rememberManualHost(host: string) {
+  mkdirSync(path.dirname(sessionHostFile), { recursive: true });
+  writeFileSync(sessionHostFile, `${JSON.stringify({ host }, null, 2)}\n`);
+}
+
 async function runScan(source: ScanSource) {
   const started = Date.now();
   const devices = await withSpinner(`scanning ${source.id}`, source.scan());
@@ -721,6 +739,8 @@ async function runScan(source: ScanSource) {
   );
   return devices;
 }
+
+let manualHostEntered = "";
 
 async function pickNetworkHost() {
   const discovered: NetworkDevice[] = [];
@@ -748,8 +768,12 @@ async function pickNetworkHost() {
     if (picked === "__local__") return undefined;
 
     if (picked === "__manual__") {
-      const host = await input({ message: "Host or IP address" });
+      const host = await input({
+        message: "Host or IP address",
+        default: readLastManualHost() || undefined,
+      });
       if (!host.trim()) process.exit(0);
+      manualHostEntered = host.trim();
       return host;
     }
 
@@ -937,6 +961,7 @@ async function runRemoteSession(
   }
 
   rememberSuccessfulUsername(host);
+  if (manualHostEntered) rememberManualHost(manualHostEntered);
 
   if (promptCwd && !requestedCwdSet) {
     const picked = await chooseRemoteCwd(ctlSock, host);
