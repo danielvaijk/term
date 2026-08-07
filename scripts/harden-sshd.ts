@@ -1,6 +1,12 @@
 #!/usr/bin/env bun
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -55,6 +61,30 @@ function sshdBin() {
   );
 }
 
+function hostKeysPresent() {
+  try {
+    return readdirSync(path.dirname(mainConfig)).some((name) =>
+      /^ssh_host_.+_key$/.test(name),
+    );
+  } catch {
+    return false;
+  }
+}
+
+// macOS only generates host keys the first time Remote Login is enabled, so a
+// fresh machine has none and every sshd invocation exits with
+// "no hostkeys available". ssh-keygen -A creates the missing ones and is a
+// no-op once they exist.
+function ensureHostKeys() {
+  if (hostKeysPresent()) return;
+  process.stdout.write("generating missing sshd host keys\n");
+  const result = run("sudo", ["ssh-keygen", "-A"], { stdio: "inherit" });
+  if (result.status !== 0) {
+    process.stderr.write("error: could not generate sshd host keys\n");
+    process.exit(result.status ?? 1);
+  }
+}
+
 function reloadSshd() {
   if (
     commandPath("launchctl") &&
@@ -79,6 +109,8 @@ function installPolicy() {
     process.stderr.write("error: sshd not found\n");
     process.exit(1);
   }
+
+  ensureHostKeys();
 
   run("sudo", ["mkdir", "-p", configDir], { stdio: "inherit" });
   const hasInclude =
@@ -121,6 +153,12 @@ function checkPolicy() {
   const sshd = sshdBin();
   if (!sshd) {
     process.stderr.write("error: sshd not found\n");
+    process.exit(1);
+  }
+  if (!hostKeysPresent()) {
+    process.stderr.write(
+      "error: no sshd host keys; run bun run harden-sshd --install\n",
+    );
     process.exit(1);
   }
   const result = run(sshd, ["-T"]);
