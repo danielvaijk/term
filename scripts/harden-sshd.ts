@@ -81,13 +81,13 @@ function installPolicy() {
   }
 
   run("sudo", ["mkdir", "-p", configDir], { stdio: "inherit" });
-  const include = run("sudo", [
-    "grep",
-    "-Eq",
-    `^[[:space:]]*Include[[:space:]]+${configDir.replaceAll("/", "\\/")}\\/\\*`,
-    mainConfig,
-  ]);
-  if (existsSync(mainConfig) && include.status !== 0) {
+  const hasInclude =
+    existsSync(mainConfig) &&
+    new RegExp(
+      `^[ \\t]*Include[ \\t]+${configDir.replaceAll(".", "\\.")}/\\*`,
+      "m",
+    ).test(run("sudo", ["cat", mainConfig]).stdout);
+  if (existsSync(mainConfig) && !hasInclude) {
     const backup = `${mainConfig}.term-backup.${new Date().toISOString().replace(/\D/g, "").slice(0, 14)}`;
     run("sudo", ["cp", mainConfig, backup], { stdio: "inherit" });
     const current = run("sudo", ["cat", mainConfig]).stdout;
