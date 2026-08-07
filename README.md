@@ -173,6 +173,12 @@ daemon hardening:
 bun run harden-sshd --install
 ```
 
+On macOS this step is skipped with a warning unless Remote Login is enabled,
+since a host that accepts no SSH connections gains nothing from the policy.
+Enable it under System Settings > General > Sharing > Remote Login (or
+`sudo systemsetup -setremotelogin on`) and rerun the command above. Leave it off
+on machines that are only ever SSH clients.
+
 The script installs an `sshd_config.d` snippet that keeps public-key auth on and
 disables password, keyboard-interactive, and root login paths. Check the
 effective daemon settings with:

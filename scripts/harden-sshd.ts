@@ -61,6 +61,27 @@ function sshdBin() {
   );
 }
 
+// macOS exposes Remote Login as the com.openssh.sshd launchd job. launchctl
+// print reports it without admin rights, exiting non-zero when the job is not
+// loaded. systemsetup -getremotelogin would need sudo, so it is unusable here.
+function remoteLoginEnabled() {
+  return (
+    commandPath("launchctl") !== null &&
+    run("launchctl", ["print", "system/com.openssh.sshd"]).status === 0
+  );
+}
+
+function warnRemoteLoginDisabled() {
+  process.stderr.write(
+    `warning: Remote Login is off, so this host accepts no SSH connections and
+         the managed policy would have no effect; skipping SSH setup.
+         Enable it in System Settings > General > Sharing > Remote Login
+         (or run: sudo systemsetup -setremotelogin on), then run:
+           bun run harden-sshd --install
+         Leave it off if this machine is only ever an SSH client.\n`,
+  );
+}
+
 function hostKeysPresent() {
   try {
     return readdirSync(path.dirname(mainConfig)).some((name) =>
@@ -86,10 +107,7 @@ function ensureHostKeys() {
 }
 
 function reloadSshd() {
-  if (
-    commandPath("launchctl") &&
-    run("launchctl", ["print", "system/com.openssh.sshd"]).status === 0
-  ) {
+  if (remoteLoginEnabled()) {
     run("sudo", ["launchctl", "kickstart", "-k", "system/com.openssh.sshd"], {
       stdio: "inherit",
     });
@@ -108,6 +126,11 @@ function installPolicy() {
   if (!sshd) {
     process.stderr.write("error: sshd not found\n");
     process.exit(1);
+  }
+
+  if (os.platform() === "darwin" && !remoteLoginEnabled()) {
+    warnRemoteLoginDisabled();
+    return;
   }
 
   ensureHostKeys();
@@ -154,6 +177,10 @@ function checkPolicy() {
   if (!sshd) {
     process.stderr.write("error: sshd not found\n");
     process.exit(1);
+  }
+  if (os.platform() === "darwin" && !remoteLoginEnabled()) {
+    warnRemoteLoginDisabled();
+    return;
   }
   if (!hostKeysPresent()) {
     process.stderr.write(
